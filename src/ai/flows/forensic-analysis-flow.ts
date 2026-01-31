@@ -93,26 +93,10 @@ JSON Schema:
             ? 'by ' + visionData.packaging_info.manufacturer
             : ''
         }`;
-  
-  const searchTool = ai.defineTool(
-    {
-        name: 'googleSearch',
-        description: 'Performs a Google search.',
-        inputSchema: z.object({ query: z.string() }),
-        outputSchema: z.any(),
-    },
-    async (input) => {
-        // This is a placeholder. In a real scenario, you'd call the Google Search API.
-        // For this app, we let Genkit handle it implicitly.
-        return { results: `Search results for: ${input.query}` };
-    }
-  );
-
 
   const searchResult = await ai.generate({
     model: 'googleai/gemini-2.5-flash',
     prompt: searchTerm,
-    tools: [searchTool],
     config: {
       temperature: 0,
       topP: 0.1,

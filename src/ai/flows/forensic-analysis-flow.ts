@@ -4,7 +4,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import {
   ForensicAnalysisResult,
   ForensicAnalysisInputSchema,
@@ -60,7 +60,7 @@ JSON Schema:
 }`;
 
   const visionResult = await ai.generate({
-    model: 'googleai/gemini-1.5-flash-latest',
+    model: 'googleai/gemini-1.5-pro-latest',
     prompt: forensicPrompt,
     config: {
       responseMimeType: 'application/json',
@@ -111,7 +111,7 @@ JSON Schema:
 
 
   const searchResult = await ai.generate({
-    model: 'googleai/gemini-1.5-flash-latest',
+    model: 'googleai/gemini-1.5-pro-latest',
     prompt: searchTerm,
     tools: [searchTool],
     config: {
@@ -177,7 +177,7 @@ Return JSON:
 }`;
 
   const validatorResult = await ai.generate({
-    model: 'googleai/gemini-1.5-flash-latest',
+    model: 'googleai/gemini-1.5-pro-latest',
     prompt: validatorSystemPrompt,
     config: {
       responseMimeType: 'application/json',

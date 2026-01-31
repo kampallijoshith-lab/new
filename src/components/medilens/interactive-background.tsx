@@ -47,7 +47,7 @@ const InteractiveBackground: React.FC = () => {
         ctx!.translate(this.x, this.y);
         ctx!.rotate(this.rotation);
 
-        ctx!.globalAlpha = 0.05;
+        ctx!.globalAlpha = 0.03;
         ctx!.fillStyle = 'hsl(var(--primary))';
         ctx!.strokeStyle = 'hsl(var(--primary))';
         ctx!.lineWidth = 1.5;

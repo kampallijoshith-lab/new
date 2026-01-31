@@ -6,15 +6,17 @@ import HomeScreen from '@/components/medilens/home-screen';
 import Scanner from '@/components/medilens/scanner';
 import AnalysisStepper from '@/components/medilens/analysis-stepper';
 import MedicineInfoDisplay from '@/components/medilens/medicine-info';
+import ResultsDashboard from '@/components/medilens/results-dashboard';
 import { Button } from '@/components/ui/button';
 import { LiveAlertsTicker } from '@/components/medilens/live-alerts-ticker';
 import InteractiveBackground from '@/components/medilens/interactive-background';
+import { Separator } from '@/components/ui/separator';
 
 export default function Home() {
   const scanner = useScanner();
 
   const renderContent = () => {
-    if (scanner.error && scanner.state !== 'info') { // Don't show global error if it's an analysis error
+    if (scanner.error && scanner.state !== 'results') { // Don't show global error if it's an analysis error
         return (
             <div className="text-center text-destructive">
                 <h2 className="text-2xl font-bold mb-4">An Error Occurred</h2>
@@ -28,13 +30,26 @@ export default function Home() {
         return <Scanner handleImageCapture={scanner.handleImageCapture} onCancel={scanner.restart} />;
       case 'analyzing':
         return <AnalysisStepper steps={scanner.analysisSteps} />;
-      case 'info':
-        return scanner.medicineInfo ? <MedicineInfoDisplay 
-                                            info={scanner.medicineInfo} 
-                                            onRestart={scanner.restart} 
-                                            onAnalyzeNext={scanner.analyzeNext}
-                                            hasNext={scanner.imageQueue.length > 0}
-                                        /> : <AnalysisStepper steps={scanner.analysisSteps} />; // Show stepper while results are loading
+      case 'results':
+        return (
+            <div className='space-y-6'>
+                {scanner.medicineInfo && <MedicineInfoDisplay 
+                                            info={scanner.medicineInfo}
+                                            showActions={false}
+                                            onRestart={()=>{}} 
+                                            onAnalyzeNext={()=>{}}
+                                            hasNext={false}
+                                        /> }
+                {(scanner.medicineInfo && scanner.forensicResult) && <Separator />}
+                {scanner.forensicResult && <ResultsDashboard results={scanner.forensicResult} onRestart={scanner.restart}/>}
+                {scanner.error && (
+                    <div className="text-center text-destructive pt-4">
+                        <h2 className="text-xl font-bold mb-2">Analysis Error</h2>
+                        <p>{scanner.error}</p>
+                    </div>
+                )}
+            </div>
+        );
       case 'idle':
       default:
         return <HomeScreen onScan={scanner.startScan} onUpload={scanner.handleMultipleImages} />;

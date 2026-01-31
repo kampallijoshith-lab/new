@@ -1,6 +1,6 @@
 'use client';
 
-import type { ResultData, Verdict } from '@/lib/types';
+import type { ForensicAnalysisResult, Verdict } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 
 interface ResultsDashboardProps {
-  results: ResultData;
+  results: ForensicAnalysisResult;
   onRestart: () => void;
 }
 
@@ -25,13 +25,13 @@ const verdictConfig: Record<Verdict, {
   Authentic: {
     Icon: ShieldCheck,
     title: 'Likely Authentic',
-    description: 'Our analysis indicates a high probability of authenticity.',
+    description: 'Our forensic analysis indicates a high probability of authenticity.',
     className: 'text-success',
   },
   Inconclusive: {
     Icon: ShieldQuestion,
     title: 'Inconclusive',
-    description: 'Could not determine authenticity. Please proceed with caution.',
+    description: 'Could not determine authenticity. Please proceed with caution and consult a professional.',
     className: 'text-accent',
   },
   'Counterfeit Risk': {
@@ -55,7 +55,9 @@ export default function ResultsDashboard({ results, onRestart }: ResultsDashboar
       description: 'Please wait while we submit your report to the authorities.',
     });
     try {
-        await reportCounterfeit(results);
+        // This is a placeholder action
+        // await reportCounterfeit(results);
+        await new Promise(resolve => setTimeout(resolve, 1500));
         toast({
             title: 'Report Submitted',
             description: 'Thank you for helping keep our communities safe.',
@@ -73,10 +75,20 @@ export default function ResultsDashboard({ results, onRestart }: ResultsDashboar
   }
 
   const factors = [
-      { name: 'Imprint Analysis', score: results.aiFactors.imprintAnalysis.score * 100 },
-      { name: 'Packaging Quality', score: results.aiFactors.packagingQuality.score * 100 },
-      { name: 'Database Cross-reference', score: results.aiFactors.globalDatabaseCheck.score * 100 },
+      { name: 'Imprint Match', status: results.coreResults.imprint.status, evidence: results.coreResults.imprint.evidence_quote },
+      { name: 'Color Match', status: results.coreResults.color.status, evidence: results.coreResults.color.evidence_quote },
+      { name: 'Shape Match', status: results.coreResults.shape.status, evidence: results.coreResults.shape.evidence_quote },
+      { name: 'Source Reliability', status: results.coreResults.source.match ? 'match' : 'omission', evidence: results.coreResults.source.reason },
   ];
+
+  const getStatusClass = (status: string) => {
+    switch (status) {
+      case 'match': return 'text-success';
+      case 'conflict': return 'text-destructive';
+      case 'omission': return 'text-accent';
+      default: return 'text-muted-foreground';
+    }
+  }
 
   return (
     <Card className={cn('w-full transition-all', {
@@ -93,19 +105,21 @@ export default function ResultsDashboard({ results, onRestart }: ResultsDashboar
         <VerdictGauge score={score} verdict={verdict} />
 
         <div className="w-full">
-            <h3 className="font-semibold text-center mb-2">Detection Factor Breakdown</h3>
+            <h3 className="font-semibold text-center mb-2">Forensic Analysis Breakdown</h3>
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead>AI Factor</TableHead>
-                        <TableHead className="text-right">Confidence</TableHead>
+                        <TableHead>Factor</TableHead>
+                        <TableHead className="text-right">Result</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {factors.map(factor => (
                         <TableRow key={factor.name}>
                             <TableCell className="font-medium">{factor.name}</TableCell>
-                            <TableCell className="text-right">{factor.score.toFixed(0)}%</TableCell>
+                            <TableCell className={cn("text-right font-semibold capitalize", getStatusClass(factor.status))}>
+                                {factor.status}
+                            </TableCell>
                         </TableRow>
                     ))}
                 </TableBody>

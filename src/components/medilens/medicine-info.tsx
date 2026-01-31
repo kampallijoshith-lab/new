@@ -10,11 +10,14 @@ interface MedicineInfoProps {
   onRestart: () => void;
   onAnalyzeNext: () => void;
   hasNext: boolean;
+  showActions?: boolean;
 }
 
-export default function MedicineInfoDisplay({ info, onRestart, onAnalyzeNext, hasNext }: MedicineInfoProps) {
+export default function MedicineInfoDisplay({ info, onRestart, onAnalyzeNext, hasNext, showActions = true }: MedicineInfoProps) {
   
   const renderButtons = () => {
+    if (!showActions) return null;
+
     if (hasNext) {
       return (
         <Button onClick={onAnalyzeNext} className="w-full mt-4">

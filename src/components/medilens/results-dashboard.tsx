@@ -5,19 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { ShieldCheck, ShieldAlert, ShieldQuestion, RotateCcw, Flag, Timer, ChevronsRight } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ShieldQuestion, RotateCcw, Flag } from 'lucide-react';
 import VerdictGauge from './verdict-gauge';
-import { reportCounterfeit } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 
 interface ResultsDashboardProps {
   results: ForensicAnalysisResult;
   onRestart: () => void;
-  onAnalyzeNext: () => void;
-  hasNext: boolean;
-  isCoolingDown: boolean;
-  cooldownTime: number;
 }
 
 const verdictConfig: Record<Verdict, {
@@ -46,7 +41,7 @@ const verdictConfig: Record<Verdict, {
   },
 };
 
-export default function ResultsDashboard({ results, onRestart, onAnalyzeNext, hasNext, isCoolingDown, cooldownTime }: ResultsDashboardProps) {
+export default function ResultsDashboard({ results, onRestart }: ResultsDashboardProps) {
   const { verdict, score } = results;
   const config = verdictConfig[verdict];
   const { toast } = useToast();
@@ -59,8 +54,6 @@ export default function ResultsDashboard({ results, onRestart, onAnalyzeNext, ha
       description: 'Please wait while we submit your report to the authorities.',
     });
     try {
-        // This is a placeholder action
-        // await reportCounterfeit(results);
         await new Promise(resolve => setTimeout(resolve, 1500));
         toast({
             title: 'Report Submitted',
@@ -93,30 +86,20 @@ export default function ResultsDashboard({ results, onRestart, onAnalyzeNext, ha
       default: return 'text-muted-foreground';
     }
   }
-  
-  const cooldownMessage = <><Timer className="mr-2 h-4 w-4 animate-spin"/>Wait {cooldownTime}s</>;
 
   const renderButtons = () => {
     const actionButtons = [];
 
     if (verdict === 'Counterfeit Risk') {
       actionButtons.push(
-        <Button key="report" size="lg" variant="destructive" onClick={handleReport} disabled={isReporting || isCoolingDown}>
+        <Button key="report" size="lg" variant="destructive" onClick={handleReport} disabled={isReporting}>
           <Flag className="mr-2"/> {isReporting ? 'Reporting...' : 'Report as Counterfeit'}
         </Button>
       );
     }
 
-    if (hasNext) {
-       actionButtons.push(
-         <Button key="next" size="lg" onClick={onAnalyzeNext} disabled={isCoolingDown}>
-           {isCoolingDown ? cooldownMessage : <><ChevronsRight className="mr-2"/> Continue to Next Image</>}
-         </Button>
-       );
-    }
-
     actionButtons.push(
-      <Button key="new" size="lg" variant="outline" onClick={onRestart} disabled={isCoolingDown && !hasNext}>
+      <Button key="new" size="lg" variant="outline" onClick={onRestart}>
         <RotateCcw className="mr-2"/> Start New Scan
       </Button>
     );

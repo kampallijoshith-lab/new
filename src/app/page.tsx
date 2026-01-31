@@ -29,29 +29,25 @@ export default function Home() {
       case 'scanning':
         return <Scanner handleImageCapture={scanner.handleImageCapture} onCancel={scanner.restart} />;
       case 'analyzing':
-        return <AnalysisStepper steps={scanner.analysisSteps} />;
+      case 'cooldown': // Show stepper during cooldown as well to indicate work is happening
+        return <AnalysisStepper 
+                  steps={scanner.analysisSteps} 
+                  isCoolingDown={scanner.isCoolingDown}
+                  cooldownTime={scanner.cooldownTime}
+                  queueLength={scanner.imageQueue.length}
+                />;
       case 'results':
-      case 'cooldown':
-        const hasNext = scanner.imageQueue.length > 0;
         return (
             <div className='space-y-6'>
                 {scanner.medicineInfo && <MedicineInfoDisplay 
                                             info={scanner.medicineInfo}
                                             showActions={!scanner.forensicResult} // Only show actions here if there's no forensic result
                                             onRestart={scanner.restart} 
-                                            onAnalyzeNext={scanner.analyzeNext}
-                                            hasNext={hasNext}
-                                            isCoolingDown={scanner.isCoolingDown}
-                                            cooldownTime={scanner.cooldownTime}
                                         /> }
                 {(scanner.medicineInfo && scanner.forensicResult) && <Separator />}
                 {scanner.forensicResult && <ResultsDashboard 
                                                 results={scanner.forensicResult} 
                                                 onRestart={scanner.restart}
-                                                onAnalyzeNext={scanner.analyzeNext}
-                                                hasNext={hasNext}
-                                                isCoolingDown={scanner.isCoolingDown}
-                                                cooldownTime={scanner.cooldownTime}
                                             />}
                 {scanner.error && (
                     <div className="text-center text-destructive pt-4">

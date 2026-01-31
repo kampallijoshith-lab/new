@@ -29,10 +29,11 @@ export const useScanner = () => {
   
   const [cooldownTime, setCooldownTime] = useState(0);
   const cooldownTimerRef = useRef<NodeJS.Timeout>();
+  const isProcessingRef = useRef(false);
 
   const isCoolingDown = state === 'cooldown';
 
-  // Cooldown Timer Effect
+  // Cooldown Timer Effect: Manages the cooldown period and decides what to do when it ends.
   useEffect(() => {
     if (state === 'cooldown') {
       cooldownTimerRef.current = setInterval(() => {
@@ -45,122 +46,120 @@ export const useScanner = () => {
         } else {
           setCooldownTime(0);
           localStorage.removeItem(COOLDOWN_STORAGE_KEY);
-          // If there are more images, move to await state, otherwise idle.
-          setState(imageQueue.length > 0 ? 'awaiting_next' : 'idle');
+          // Cooldown over. If there are more images, trigger the next analysis. Otherwise, go idle.
+          if (imageQueue.length > 0) {
+            setState('awaiting_next');
+          } else {
+            setState('idle');
+          }
         }
       }, 1000);
     } else {
-      if (cooldownTimerRef.current) {
-        clearInterval(cooldownTimerRef.current);
-      }
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
     }
-
-    return () => {
-      if (cooldownTimerRef.current) {
-        clearInterval(cooldownTimerRef.current);
-      }
-    };
+    return () => { if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current); };
   }, [state, imageQueue.length]);
 
-  // Main Analysis Engine Effect
+  // Engine Entry Point: Kicks off the analysis for the next item in the queue.
   useEffect(() => {
-    // This effect acts as the engine, processing one image from the queue when ready.
-    if (state === 'awaiting_next' && imageQueue.length > 0) {
+    if (state === 'awaiting_next' && imageQueue.length > 0 && !isProcessingRef.current) {
+      isProcessingRef.current = true; // Acquire lock
+
       const nextImage = imageQueue[0];
       const remainingImages = imageQueue.slice(1);
       
-      // Set up for the next analysis
       setImage(nextImage);
       setImageQueue(remainingImages);
-      setAnalysisResult(null);
+      setAnalysisResult(null); // Clear previous results
       setError(null);
       
-      // Transition to analyzing
-      setState('analyzing');
-    } else if (state === 'analyzing' && image) {
-      _runAnalysis(image);
+      setState('analyzing'); // Proceed to analysis
     }
-  }, [state, imageQueue, image]);
-  
-  const _runAnalysis = async (imageDataUrl: string) => {
-    // 1. Start the cooldown immediately
-    const endTime = Date.now() + COOLDOWN_SECONDS * 1000;
-    localStorage.setItem(COOLDOWN_STORAGE_KEY, endTime.toString());
-    setCooldownTime(COOLDOWN_SECONDS);
+  }, [state, imageQueue]);
 
-    // 2. Run analysis steps UI
-    let currentSteps = [...initialAnalysisSteps].map(s => ({ ...s, status: 'pending' as const }));
-    const runStep = async (index: number) => {
-      if (index < currentSteps.length) {
-        currentSteps = currentSteps.map((step, idx) => 
-            idx < index ? { ...step, status: 'complete' } :
-            idx === index ? { ...step, status: 'in-progress' } :
-            step
-        );
-        setAnalysisSteps(currentSteps);
-        await new Promise(resolve => setTimeout(resolve, currentSteps[index].duration));
+  // Analysis Runner: Executes the async analysis when the state is 'analyzing'.
+  useEffect(() => {
+    const runAnalysis = async () => {
+      if (state === 'analyzing' && image) {
+        const endTime = Date.now() + COOLDOWN_SECONDS * 1000;
+        localStorage.setItem(COOLDOWN_STORAGE_KEY, endTime.toString());
+        setCooldownTime(COOLDOWN_SECONDS);
+
+        let currentSteps = [...initialAnalysisSteps].map(s => ({ ...s, status: 'pending' as const }));
+        const runStep = async (index: number) => {
+          if (index < currentSteps.length) {
+            currentSteps = currentSteps.map((step, idx) => 
+                idx < index ? { ...step, status: 'complete' } :
+                idx === index ? { ...step, status: 'in-progress' } :
+                step
+            );
+            setAnalysisSteps(currentSteps);
+            await new Promise(resolve => setTimeout(resolve, currentSteps[index].duration));
+          }
+        };
+
+        await runStep(0);
+        await runStep(1);
+
+        try {
+          const result = await forensicAnalysisFlow({ photoDataUri: image });
+          await runStep(2); await runStep(3); await runStep(4); await runStep(5); await runStep(6);
+          setAnalysisResult(result);
+          setAnalysisSteps(currentSteps.map(step => ({...step, status: 'complete'})));
+        } catch (e: any) {
+          console.error(e);
+          setError(e.message || 'An unexpected error occurred during analysis.');
+        } finally {
+          setState('results'); // Transition to showing results
+        }
       }
     };
-    
-    await runStep(0);
-    await runStep(1);
 
-    try {
-      // 3. Perform the actual AI call
-      const result = await forensicAnalysisFlow({ photoDataUri: imageDataUrl });
-      await runStep(2); await runStep(3); await runStep(4); await runStep(5); await runStep(6);
-      
-      setAnalysisResult(result);
-      setAnalysisSteps(currentSteps.map(step => ({...step, status: 'complete'})));
-    } catch (e: any) {
-      console.error(e);
-      setError(e.message || 'An unexpected error occurred during analysis.');
-    } finally {
-      // 4. After analysis, transition to displaying results
-      setState('results');
+    runAnalysis();
+  }, [state, image]);
+
+  // Automatic Transition from Results to Cooldown
+  useEffect(() => {
+    if (state === 'results') {
+      const timer = setTimeout(() => {
+        isProcessingRef.current = false; // Release lock
+        setState('cooldown'); // Start cooldown, which will then trigger the next image if available
+      }, 4000); // Display results for 4 seconds
+      return () => clearTimeout(timer);
     }
-  };
+  }, [state]);
   
   const startScan = useCallback(() => {
-    if (state !== 'idle') return;
+    if (isProcessingRef.current) return;
     setState('scanning');
     setImage(null);
     setAnalysisResult(null);
     setError(null);
     setImageQueue([]);
-  }, [state]);
+  }, []);
 
   const handleImageCapture = useCallback((imageDataUrl: string) => {
-    // This is called from the scanner UI for a single image
-    if (state !== 'scanning') return;
+    if (isProcessingRef.current) return;
     setImageQueue([imageDataUrl]);
     setState('awaiting_next'); // Kickstart the engine
-  }, [state]);
+  }, []);
 
   const handleMultipleImages = useCallback((imageDataUrls: string[]) => {
-    if (state !== 'idle' || imageDataUrls.length === 0) return;
+    if (isProcessingRef.current || imageDataUrls.length === 0) return;
     setImageQueue(imageDataUrls);
     setState('awaiting_next'); // Kickstart the engine
-  }, [state]);
-
-  const analyzeNext = useCallback(() => {
-    if (state !== 'results') return;
-    // Transition to cooldown state. The effect will handle moving to the next analysis.
-    setState('cooldown');
-  }, [state]);
+  }, []);
 
   const restart = useCallback(() => {
-    // Only allow restart if not in the middle of something critical
-    if (state === 'analyzing' || state === 'cooldown') return;
+    if (isProcessingRef.current) return;
     setState('idle');
     setImage(null);
     setAnalysisResult(null);
     setError(null);
     setImageQueue([]);
-    // Clear any lingering cooldown
     localStorage.removeItem(COOLDOWN_STORAGE_KEY);
     setCooldownTime(0);
-  }, [state]);
+  }, []);
 
   const medicineInfo: MedicineInfo | null = analysisResult 
     ? {
@@ -177,7 +176,7 @@ export const useScanner = () => {
     : null;
 
   return {
-    state: state as ScannerState, // Public state is simplified
+    state: state as ScannerState,
     image,
     analysisSteps,
     medicineInfo,
@@ -189,7 +188,6 @@ export const useScanner = () => {
     startScan,
     handleImageCapture,
     handleMultipleImages,
-    analyzeNext, // This will now transition to cooldown
     restart,
   };
 };

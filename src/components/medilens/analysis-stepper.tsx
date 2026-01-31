@@ -1,10 +1,13 @@
 'use client';
 
-import { CheckCircle, Loader, Circle } from 'lucide-react';
+import { CheckCircle, Loader, Circle, Timer } from 'lucide-react';
 import type { AnalysisStep } from '@/lib/types';
 
 interface AnalysisStepperProps {
   steps: AnalysisStep[];
+  isCoolingDown?: boolean;
+  cooldownTime?: number;
+  queueLength?: number;
 }
 
 const getStatusIcon = (status: AnalysisStep['status']) => {
@@ -19,7 +22,23 @@ const getStatusIcon = (status: AnalysisStep['status']) => {
   }
 };
 
-export default function AnalysisStepper({ steps }: AnalysisStepperProps) {
+export default function AnalysisStepper({ steps, isCoolingDown, cooldownTime, queueLength }: AnalysisStepperProps) {
+  
+  const renderCooldownInfo = () => {
+    if (!isCoolingDown) return null;
+    
+    const nextText = queueLength && queueLength > 0 
+      ? `Analyzing next image in ${cooldownTime}s...` 
+      : `Ready for next scan in ${cooldownTime}s...`;
+
+    return (
+        <div className="mt-8 flex items-center justify-center text-accent font-semibold animate-pulse">
+            <Timer className="mr-2 h-5 w-5"/>
+            <p>{nextText}</p>
+        </div>
+    );
+  }
+
   return (
     <div className="w-full flex flex-col items-center">
       <h2 className="font-headline text-3xl font-bold mb-2">Analyzing...</h2>
@@ -38,6 +57,7 @@ export default function AnalysisStepper({ steps }: AnalysisStepperProps) {
           </div>
         ))}
       </div>
+      {renderCooldownInfo()}
     </div>
   );
 }

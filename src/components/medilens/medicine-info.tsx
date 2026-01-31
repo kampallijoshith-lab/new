@@ -3,37 +3,24 @@
 import type { MedicineInfo } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Info, Shield, List, AlertTriangle, AlertCircle, Timer, RotateCcw } from 'lucide-react';
+import { Info, Shield, List, AlertTriangle, AlertCircle, RotateCcw } from 'lucide-react';
 
 interface MedicineInfoProps {
   info: MedicineInfo;
   onRestart: () => void;
-  onAnalyzeNext: () => void;
-  hasNext: boolean;
   showActions?: boolean;
-  isCoolingDown: boolean;
-  cooldownTime: number;
 }
 
-export default function MedicineInfoDisplay({ info, onRestart, onAnalyzeNext, hasNext, showActions = true, isCoolingDown, cooldownTime }: MedicineInfoProps) {
+export default function MedicineInfoDisplay({ info, onRestart, showActions = true }: MedicineInfoProps) {
   
   const renderButtons = () => {
     if (!showActions) return null;
 
-    const cooldownMessage = <><Timer className="mr-2 h-4 w-4 animate-spin"/>Wait {cooldownTime}s</>;
-
-    if (hasNext) {
-      return (
-        <Button onClick={onAnalyzeNext} className="w-full mt-4" disabled={isCoolingDown}>
-          {isCoolingDown ? cooldownMessage : 'Continue to Next Image'}
-        </Button>
-      )
-    }
     return (
       <Button onClick={onRestart} className="w-full mt-4" variant="outline">
         <RotateCcw className="mr-2 h-4 w-4" /> Scan Another Medicine
       </Button>
-    )
+    );
   }
 
   if (info.error) {

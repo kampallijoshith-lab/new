@@ -12,10 +12,6 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import admin from 'firebase-admin';
 
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
-
 const CrossReferenceInputSchema = z.object({
   medicineInfo: z
     .string()

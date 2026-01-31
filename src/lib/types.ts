@@ -70,7 +70,7 @@ export type ForensicAnalysisResult = {
   analysisError?: string | null;
 };
 
-export type ScannerState = 'idle' | 'scanning' | 'analyzing' | 'results' ;
+export type ScannerState = 'idle' | 'scanning' | 'analyzing' | 'results' | 'cooldown';
 
 export type AnalysisStepStatus = 'pending' | 'in-progress' | 'complete' | 'error';
 export interface AnalysisStep {

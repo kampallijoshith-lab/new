@@ -8,13 +8,16 @@ export type MedicineInfo = {
   error?: string;
 };
 
-export const ForensicAnalysisInputSchema = z.object({
+// Zod schema for input, can be used by the flow.
+export const ForensicAnalysisInputZodSchema = z.object({
   photoDataUri: z
     .string()
     .describe(
       "A photo of the medicine, as a data URI that must include a MIME type and use Base64 encoding."
     ),
 });
+export type ForensicAnalysisInput = z.infer<typeof ForensicAnalysisInputZodSchema>;
+
 
 export type Source = {
   uri: string;
@@ -25,7 +28,7 @@ export type Source = {
 export type CoreMatch = {
   status: 'match' | 'conflict' | 'omission';
   reason: string;
-  evidence_quote: string;
+  evidence_quote?: string;
 };
 
 export type CoreResult = {
@@ -46,18 +49,25 @@ export type CoreResults = {
 export type DetailedFactor = {
   name: string;
   status: 'match' | 'conflict' | 'omission';
-  evidence_quote: string;
+  evidence_quote?: string;
 };
 
+// This is now the single, unified result type from the master flow.
 export type ForensicAnalysisResult = {
   score: number;
   verdict: Verdict;
   imprint: string;
-  sources: Source[];
+  sources?: Source[];
   coreResults: CoreResults;
-  detailed: DetailedFactor[];
+  detailed?: DetailedFactor[];
   timestamp: string;
   scanId: string;
+  // Merged from MedicineInfo
+  primaryUses?: string;
+  howItWorks?: string;
+  commonIndications?: string[];
+  safetyDisclaimer?: string;
+  analysisError?: string | null;
 };
 
 export type ScannerState = 'idle' | 'scanning' | 'analyzing' | 'results' ;

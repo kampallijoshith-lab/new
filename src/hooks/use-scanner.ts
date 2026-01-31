@@ -2,16 +2,15 @@
 
 import { useState, useCallback } from 'react';
 import type { ScannerState, AnalysisStep, MedicineInfo, ForensicAnalysisResult } from '@/lib/types';
-import { analyzeDrugData } from '@/ai/flows/analyze-drug-data';
 import { forensicAnalysisFlow } from '@/ai/flows/forensic-analysis-flow';
 
 const initialAnalysisSteps: AnalysisStep[] = [
-  { title: 'Uploading and queueing images...', status: 'pending', duration: 500 },
-  { title: 'Analyzing for general information...', status: 'pending', duration: 2000 },
-  { title: 'Performing forensic quality check...', status: 'pending', duration: 2000 },
+  { title: 'Uploading and queueing image...', status: 'pending', duration: 500 },
+  { title: 'Performing unified analysis...', status: 'pending', duration: 2000 },
+  { title: 'Checking forensic quality...', status: 'pending', duration: 2000 },
   { title: 'Extracting physical characteristics...', status: 'pending', duration: 2500 },
   { title: 'Searching global medical databases...', status: 'pending', duration: 3000 },
-  { title: 'Validating against ground truth...', status: 'pending', duration: 2500 },
+  { title: 'Cross-referencing and validating...', status: 'pending', duration: 2500 },
   { title: 'Calculating authenticity score...', status: 'pending', duration: 1000 },
 ];
 
@@ -19,15 +18,13 @@ export const useScanner = () => {
   const [state, setState] = useState<ScannerState>('idle');
   const [image, setImage] = useState<string | null>(null);
   const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>(initialAnalysisSteps);
-  const [medicineInfo, setMedicineInfo] = useState<MedicineInfo | null>(null);
-  const [forensicResult, setForensicResult] = useState<ForensicAnalysisResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<ForensicAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [imageQueue, setImageQueue] = useState<string[]>([]);
 
   const _runAnalysis = async (imageDataUrl: string) => {
     // Reset states for new analysis
-    setMedicineInfo(null);
-    setForensicResult(null);
+    setAnalysisResult(null);
     setError(null);
     setState('analyzing');
 
@@ -47,27 +44,20 @@ export const useScanner = () => {
     
     // Animate first step
     await runStep(0); 
-
-    // Run analyses in parallel
-    const infoPromise = analyzeDrugData({ photoDataUri: imageDataUrl });
-    const forensicPromise = forensicAnalysisFlow({ photoDataUri: imageDataUrl });
-    
-    // Animate steps while waiting
     await runStep(1);
-    await runStep(2);
-    await runStep(3);
-    await runStep(4);
 
     try {
-      const [infoResult, forensicData] = await Promise.all([infoPromise, forensicPromise]);
+      // Single, unified API call
+      const result = await forensicAnalysisFlow({ photoDataUri: imageDataUrl });
       
       // Animate remaining steps
+      await runStep(2);
+      await runStep(3);
+      await runStep(4);
       await runStep(5);
       await runStep(6);
 
-      setMedicineInfo(infoResult.error ? { error: infoResult.error } : infoResult);
-      setForensicResult(forensicData);
-
+      setAnalysisResult(result);
       setAnalysisSteps(currentSteps.map(step => ({...step, status: 'complete'})));
       setState('results');
 
@@ -82,8 +72,7 @@ export const useScanner = () => {
     if (imageDataUrls.length === 0) {
       setState('idle');
       setImage(null);
-      setMedicineInfo(null);
-      setForensicResult(null);
+      setAnalysisResult(null);
       setError(null);
       setImageQueue([]);
       return;
@@ -101,8 +90,7 @@ export const useScanner = () => {
   const startScan = useCallback(() => {
     setState('scanning');
     setImage(null);
-    setMedicineInfo(null);
-    setForensicResult(null);
+    setAnalysisResult(null);
     setError(null);
     setImageQueue([]);
     setAnalysisSteps(initialAnalysisSteps.map(s => ({ ...s, status: 'pending' })));
@@ -124,8 +112,7 @@ export const useScanner = () => {
     } else {
       setState('idle');
       setImage(null);
-      setMedicineInfo(null);
-      setForensicResult(null);
+      setAnalysisResult(null);
       setError(null);
       setImageQueue([]);
     }
@@ -134,11 +121,25 @@ export const useScanner = () => {
   const restart = useCallback(() => {
     setState('idle');
     setImage(null);
-    setMedicineInfo(null);
-    setForensicResult(null);
+    setAnalysisResult(null);
     setError(null);
     setImageQueue([]);
   }, []);
+
+  // Derive the separate info/result objects for the UI to maintain component compatibility.
+  const medicineInfo: MedicineInfo | null = analysisResult 
+    ? {
+        primaryUses: analysisResult.primaryUses,
+        howItWorks: analysisResult.howItWorks,
+        commonIndications: analysisResult.commonIndications,
+        safetyDisclaimer: analysisResult.safetyDisclaimer,
+        error: analysisResult.analysisError || undefined,
+      } 
+    : null;
+
+  const forensicResult: ForensicAnalysisResult | null = analysisResult && !analysisResult.analysisError 
+    ? analysisResult 
+    : null;
 
   return {
     state,

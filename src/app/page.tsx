@@ -31,14 +31,16 @@ export default function Home() {
       case 'analyzing':
         return <AnalysisStepper steps={scanner.analysisSteps} />;
       case 'results':
+      case 'cooldown':
+        const hasNext = scanner.imageQueue.length > 0;
         return (
             <div className='space-y-6'>
                 {scanner.medicineInfo && <MedicineInfoDisplay 
                                             info={scanner.medicineInfo}
-                                            showActions={true}
+                                            showActions={!scanner.forensicResult} // Only show actions here if there's no forensic result
                                             onRestart={scanner.restart} 
                                             onAnalyzeNext={scanner.analyzeNext}
-                                            hasNext={scanner.imageQueue.length > 0}
+                                            hasNext={hasNext}
                                             isCoolingDown={scanner.isCoolingDown}
                                             cooldownTime={scanner.cooldownTime}
                                         /> }
@@ -46,6 +48,8 @@ export default function Home() {
                 {scanner.forensicResult && <ResultsDashboard 
                                                 results={scanner.forensicResult} 
                                                 onRestart={scanner.restart}
+                                                onAnalyzeNext={scanner.analyzeNext}
+                                                hasNext={hasNext}
                                                 isCoolingDown={scanner.isCoolingDown}
                                                 cooldownTime={scanner.cooldownTime}
                                             />}

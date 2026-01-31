@@ -3,7 +3,7 @@
 import type { MedicineInfo } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Info, Shield, List, AlertTriangle, AlertCircle, Timer } from 'lucide-react';
+import { Info, Shield, List, AlertTriangle, AlertCircle, Timer, RotateCcw } from 'lucide-react';
 
 interface MedicineInfoProps {
   info: MedicineInfo;
@@ -20,18 +20,18 @@ export default function MedicineInfoDisplay({ info, onRestart, onAnalyzeNext, ha
   const renderButtons = () => {
     if (!showActions) return null;
 
-    const cooldownMessage = <><Timer className="mr-2 animate-spin"/>Please wait {cooldownTime}s</>;
+    const cooldownMessage = <><Timer className="mr-2 h-4 w-4 animate-spin"/>Wait {cooldownTime}s</>;
 
     if (hasNext) {
       return (
         <Button onClick={onAnalyzeNext} className="w-full mt-4" disabled={isCoolingDown}>
-          {isCoolingDown ? cooldownMessage : 'Analyze Next Image'}
+          {isCoolingDown ? cooldownMessage : 'Continue to Next Image'}
         </Button>
       )
     }
     return (
-      <Button onClick={onRestart} className="w-full mt-4" disabled={isCoolingDown}>
-        {isCoolingDown ? cooldownMessage : 'Scan Another Medicine'}
+      <Button onClick={onRestart} className="w-full mt-4" variant="outline">
+        <RotateCcw className="mr-2 h-4 w-4" /> Scan Another Medicine
       </Button>
     )
   }
@@ -47,7 +47,9 @@ export default function MedicineInfoDisplay({ info, onRestart, onAnalyzeNext, ha
         </CardHeader>
         <CardContent className="space-y-6 text-center">
             <p className="text-destructive-foreground">{info.error}</p>
-            {renderButtons()}
+            <div className="flex flex-col gap-2">
+              {renderButtons()}
+            </div>
         </CardContent>
       </Card>
     );
@@ -95,7 +97,9 @@ export default function MedicineInfoDisplay({ info, onRestart, onAnalyzeNext, ha
           </div>
         )}
         
-        {renderButtons()}
+        <div className="flex flex-col gap-2">
+          {renderButtons()}
+        </div>
       </CardContent>
     </Card>
   );

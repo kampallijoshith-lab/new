@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { ShieldCheck, ShieldAlert, ShieldQuestion, RotateCcw, Flag, Timer } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ShieldQuestion, RotateCcw, Flag, Timer, ChevronsRight } from 'lucide-react';
 import VerdictGauge from './verdict-gauge';
 import { reportCounterfeit } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -14,6 +14,8 @@ import { useState } from 'react';
 interface ResultsDashboardProps {
   results: ForensicAnalysisResult;
   onRestart: () => void;
+  onAnalyzeNext: () => void;
+  hasNext: boolean;
   isCoolingDown: boolean;
   cooldownTime: number;
 }
@@ -44,7 +46,7 @@ const verdictConfig: Record<Verdict, {
   },
 };
 
-export default function ResultsDashboard({ results, onRestart, isCoolingDown, cooldownTime }: ResultsDashboardProps) {
+export default function ResultsDashboard({ results, onRestart, onAnalyzeNext, hasNext, isCoolingDown, cooldownTime }: ResultsDashboardProps) {
   const { verdict, score } = results;
   const config = verdictConfig[verdict];
   const { toast } = useToast();
@@ -92,7 +94,35 @@ export default function ResultsDashboard({ results, onRestart, isCoolingDown, co
     }
   }
   
-  const cooldownMessage = <><Timer className="mr-2 animate-spin"/>Please wait {cooldownTime}s</>;
+  const cooldownMessage = <><Timer className="mr-2 h-4 w-4 animate-spin"/>Wait {cooldownTime}s</>;
+
+  const renderButtons = () => {
+    const actionButtons = [];
+
+    if (verdict === 'Counterfeit Risk') {
+      actionButtons.push(
+        <Button key="report" size="lg" variant="destructive" onClick={handleReport} disabled={isReporting || isCoolingDown}>
+          <Flag className="mr-2"/> {isReporting ? 'Reporting...' : 'Report as Counterfeit'}
+        </Button>
+      );
+    }
+
+    if (hasNext) {
+       actionButtons.push(
+         <Button key="next" size="lg" onClick={onAnalyzeNext} disabled={isCoolingDown}>
+           {isCoolingDown ? cooldownMessage : <><ChevronsRight className="mr-2"/> Continue to Next Image</>}
+         </Button>
+       );
+    }
+
+    actionButtons.push(
+      <Button key="new" size="lg" variant="outline" onClick={onRestart} disabled={isCoolingDown && !hasNext}>
+        <RotateCcw className="mr-2"/> Start New Scan
+      </Button>
+    );
+
+    return actionButtons;
+  }
 
   return (
     <Card className={cn('w-full transition-all', {
@@ -131,14 +161,7 @@ export default function ResultsDashboard({ results, onRestart, isCoolingDown, co
         </div>
         
         <div className="w-full flex flex-col gap-2">
-            {verdict === 'Counterfeit Risk' && (
-              <Button size="lg" variant="destructive" onClick={handleReport} disabled={isReporting || isCoolingDown}>
-                <Flag className="mr-2"/> {isReporting ? 'Reporting...' : 'Report as Counterfeit'}
-              </Button>
-            )}
-            <Button size="lg" variant="outline" onClick={onRestart} disabled={isCoolingDown}>
-              {isCoolingDown ? cooldownMessage : <><RotateCcw className="mr-2"/> Start New Scan</>}
-            </Button>
+            {renderButtons()}
         </div>
       </CardContent>
     </Card>

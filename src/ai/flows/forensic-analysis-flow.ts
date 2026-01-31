@@ -105,7 +105,7 @@ const multiAgentAnalysisFlow = ai.defineFlow(
 
     // Step 1: Get visual description from Gemini
     const visionResponse = await visionPrompt(input);
-    const visualDesc = visionResponse.output();
+    const visualDesc = visionResponse.output;
     if (!visualDesc) {
         throw new Error("Step 1 Failed: Could not get visual description from Gemini.");
     }

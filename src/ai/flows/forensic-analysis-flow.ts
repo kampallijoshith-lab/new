@@ -95,13 +95,27 @@ const multiAgentAnalysisFlow = ai.defineFlow(
     outputSchema: UnifiedAnalysisResultSchema,
   },
   async (input) => {
-    // API Key Validation
-    if (!process.env.GEMINI_API_KEY || !process.env.EXA_API_KEY || !process.env.GROQ_API_KEY) {
-        throw new Error("One or more API keys are missing or invalid in your .env file. Please ensure GEMINI_API_KEY, EXA_API_KEY, and GROQ_API_KEY are set correctly. IMPORTANT: If you have shared your key publicly (like in a chat), it has likely been automatically disabled for security. You must generate a new key and add it to your .env file. After saving the file, you MUST restart your server for the changes to take effect.");
-    }
+    // --- START: New, more robust API Key validation ---
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const exaKey = process.env.EXA_API_KEY;
+    const groqKey = process.env.GROQ_API_KEY;
 
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    const exa = new Exa({ apiKey: process.env.EXA_API_KEY });
+    const missingKeys: string[] = [];
+    if (!geminiKey) missingKeys.push('GEMINI_API_KEY');
+    if (!exaKey) missingKeys.push('EXA_API_KEY');
+    if (!groqKey) missingKeys.push('GROQ_API_KEY');
+
+    if (missingKeys.length > 0) {
+      throw new Error(
+        `Configuration Error: The following API key(s) are missing from your environment: ${missingKeys.join(
+          ', '
+        )}. Please ensure they are in a .env file at the project root and that you have FULLY RESTARTED your server after adding them.`
+      );
+    }
+    // --- END: New validation ---
+
+    const groq = new Groq({ apiKey: groqKey });
+    const exa = new Exa({ apiKey: exaKey });
 
     // Step 1: Get visual description from Gemini
     const visionResponse = await visionPrompt(input);

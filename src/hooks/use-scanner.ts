@@ -26,11 +26,9 @@ export const useScanner = () => {
   const [error, setError] = useState<string | null>(null);
   const [imageQueue, setImageQueue] = useState<string[]>([]);
   
-  // New state for cooldown
   const [isCoolingDown, setIsCoolingDown] = useState(false);
   const [cooldownTime, setCooldownTime] = useState(0);
 
-  // Cooldown management effect
   useEffect(() => {
     let timer: NodeJS.Timeout | undefined;
 
@@ -51,7 +49,7 @@ export const useScanner = () => {
       }
     };
     
-    checkCooldown(); // Check on mount
+    checkCooldown();
     
     if (isCoolingDown) {
       timer = setInterval(checkCooldown, 1000);
@@ -73,15 +71,7 @@ export const useScanner = () => {
   };
 
   const _runAnalysis = async (imageDataUrl: string) => {
-    if (isCoolingDown) return; // Prevent analysis during cooldown
-
-    // Reset states for new analysis
-    setAnalysisResult(null);
-    setError(null);
-    setState('analyzing');
-
     let currentSteps = [...initialAnalysisSteps].map(s => ({ ...s, status: 'pending' as const }));
-
     const runStep = async (index: number) => {
       if (index < currentSteps.length) {
         currentSteps = currentSteps.map((step, idx) => 
@@ -94,86 +84,77 @@ export const useScanner = () => {
       }
     };
     
-    // Animate first step
-    await runStep(0); 
+    await runStep(0);
     await runStep(1);
 
     try {
-      // Single, unified API call
       const result = await forensicAnalysisFlow({ photoDataUri: imageDataUrl });
-      
-      // Animate remaining steps
       await runStep(2);
       await runStep(3);
       await runStep(4);
       await runStep(5);
       await runStep(6);
-
       setAnalysisResult(result);
       setAnalysisSteps(currentSteps.map(step => ({...step, status: 'complete'})));
-
     } catch (e: any) {
       console.error(e);
       setError(e.message || 'An unexpected error occurred during analysis.');
     } finally {
-        setState('results');
-        startCooldown();
+      setState('results');
     }
   };
-
-  const _startAnalysisWithQueue = useCallback((imageDataUrls: string[]) => {
-    if (isCoolingDown || imageDataUrls.length === 0) {
-      if (imageDataUrls.length === 0) {
-        setState('idle');
-        setImage(null);
-        setAnalysisResult(null);
-        setError(null);
-        setImageQueue([]);
-      }
+  
+  const initiateAnalysis = useCallback((imageDataUrls: string[]) => {
+    if (state !== 'idle' && state !== 'scanning') {
+      return;
+    }
+    if (isCoolingDown) {
+      return;
+    }
+    if (!imageDataUrls || imageDataUrls.length === 0) {
       return;
     }
 
+    startCooldown();
+    setState('analyzing');
+    
     const nextImage = imageDataUrls[0];
     const remainingImages = imageDataUrls.slice(1);
-
+    
     setImage(nextImage);
     setImageQueue(remainingImages);
+    setAnalysisResult(null);
+    setError(null);
     setAnalysisSteps(initialAnalysisSteps.map(s => ({ ...s, status: 'pending' })));
+
     _runAnalysis(nextImage);
-  }, [isCoolingDown]);
+  }, [state, isCoolingDown]);
+
 
   const startScan = useCallback(() => {
-    if (isCoolingDown) return;
+    if (state !== 'idle' || isCoolingDown) return;
     setState('scanning');
     setImage(null);
     setAnalysisResult(null);
     setError(null);
     setImageQueue([]);
-    setAnalysisSteps(initialAnalysisSteps.map(s => ({ ...s, status: 'pending' })));
-  }, [isCoolingDown]);
+  }, [state, isCoolingDown]);
 
   const handleImageCapture = useCallback((imageDataUrl: string) => {
-    _startAnalysisWithQueue([imageDataUrl]);
-  }, [_startAnalysisWithQueue]);
+    initiateAnalysis([imageDataUrl]);
+  }, [initiateAnalysis]);
 
   const handleMultipleImages = useCallback((imageDataUrls: string[]) => {
-    if (imageDataUrls.length > 0) {
-      _startAnalysisWithQueue(imageDataUrls);
-    }
-  }, [_startAnalysisWithQueue]);
+    initiateAnalysis(imageDataUrls);
+  }, [initiateAnalysis]);
 
   const analyzeNext = useCallback(() => {
-    if (isCoolingDown) return;
-    if(imageQueue.length > 0) {
-      _startAnalysisWithQueue(imageQueue);
-    } else {
-      setState('idle');
-      setImage(null);
-      setAnalysisResult(null);
-      setError(null);
-      setImageQueue([]);
-    }
-  }, [imageQueue, _startAnalysisWithQueue, isCoolingDown]);
+    // Let's reset state before initiating, to allow `initiateAnalysis` to proceed.
+    setState('idle');
+    // Use a timeout to ensure state update has propagated before calling initiateAnalysis.
+    setTimeout(() => initiateAnalysis(imageQueue), 0);
+  }, [imageQueue, initiateAnalysis]);
+
 
   const restart = useCallback(() => {
     if (isCoolingDown) return;
@@ -184,7 +165,6 @@ export const useScanner = () => {
     setImageQueue([]);
   }, [isCoolingDown]);
 
-  // Derive the separate info/result objects for the UI to maintain component compatibility.
   const medicineInfo: MedicineInfo | null = analysisResult 
     ? {
         primaryUses: analysisResult.primaryUses,

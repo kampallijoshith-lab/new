@@ -97,7 +97,7 @@ const multiAgentAnalysisFlow = ai.defineFlow(
   async (input) => {
     // API Key Validation
     if (!process.env.GEMINI_API_KEY || !process.env.EXA_API_KEY || !process.env.GROQ_API_KEY) {
-        throw new Error("One or more API keys are missing from your .env file. Please ensure GEMINI_API_KEY, EXA_API_KEY, and GROQ_API_KEY are set and then restart your server.");
+        throw new Error("One or more API keys are missing or invalid in your .env file. Please ensure GEMINI_API_KEY, EXA_API_KEY, and GROQ_API_KEY are set correctly. IMPORTANT: If you have shared your key publicly (like in a chat), it has likely been automatically disabled for security. You must generate a new key and add it to your .env file. After saving the file, you MUST restart your server for the changes to take effect.");
     }
 
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });

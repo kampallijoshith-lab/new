@@ -48,8 +48,8 @@ const InteractiveBackground: React.FC = () => {
         ctx!.rotate(this.rotation);
 
         ctx!.globalAlpha = 0.03;
-        ctx!.fillStyle = 'hsl(var(--primary))';
-        ctx!.strokeStyle = 'hsl(var(--primary))';
+        ctx!.fillStyle = 'hsl(var(--foreground))';
+        ctx!.strokeStyle = 'hsl(var(--foreground))';
         ctx!.lineWidth = 1.5;
 
         switch (this.type) {

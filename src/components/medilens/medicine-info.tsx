@@ -3,7 +3,7 @@
 import type { MedicineInfo } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Info, Shield, List, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Info, Shield, List, AlertTriangle, AlertCircle, Timer } from 'lucide-react';
 
 interface MedicineInfoProps {
   info: MedicineInfo;
@@ -11,23 +11,27 @@ interface MedicineInfoProps {
   onAnalyzeNext: () => void;
   hasNext: boolean;
   showActions?: boolean;
+  isCoolingDown: boolean;
+  cooldownTime: number;
 }
 
-export default function MedicineInfoDisplay({ info, onRestart, onAnalyzeNext, hasNext, showActions = true }: MedicineInfoProps) {
+export default function MedicineInfoDisplay({ info, onRestart, onAnalyzeNext, hasNext, showActions = true, isCoolingDown, cooldownTime }: MedicineInfoProps) {
   
   const renderButtons = () => {
     if (!showActions) return null;
 
+    const cooldownMessage = <><Timer className="mr-2 animate-spin"/>Please wait {cooldownTime}s</>;
+
     if (hasNext) {
       return (
-        <Button onClick={onAnalyzeNext} className="w-full mt-4">
-          Analyze Next Image
+        <Button onClick={onAnalyzeNext} className="w-full mt-4" disabled={isCoolingDown}>
+          {isCoolingDown ? cooldownMessage : 'Analyze Next Image'}
         </Button>
       )
     }
     return (
-      <Button onClick={onRestart} className="w-full mt-4">
-        Scan Another Medicine
+      <Button onClick={onRestart} className="w-full mt-4" disabled={isCoolingDown}>
+        {isCoolingDown ? cooldownMessage : 'Scan Another Medicine'}
       </Button>
     )
   }

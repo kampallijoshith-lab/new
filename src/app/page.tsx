@@ -35,13 +35,20 @@ export default function Home() {
             <div className='space-y-6'>
                 {scanner.medicineInfo && <MedicineInfoDisplay 
                                             info={scanner.medicineInfo}
-                                            showActions={false}
-                                            onRestart={()=>{}} 
-                                            onAnalyzeNext={()=>{}}
-                                            hasNext={false}
+                                            showActions={true}
+                                            onRestart={scanner.restart} 
+                                            onAnalyzeNext={scanner.analyzeNext}
+                                            hasNext={scanner.imageQueue.length > 0}
+                                            isCoolingDown={scanner.isCoolingDown}
+                                            cooldownTime={scanner.cooldownTime}
                                         /> }
                 {(scanner.medicineInfo && scanner.forensicResult) && <Separator />}
-                {scanner.forensicResult && <ResultsDashboard results={scanner.forensicResult} onRestart={scanner.restart}/>}
+                {scanner.forensicResult && <ResultsDashboard 
+                                                results={scanner.forensicResult} 
+                                                onRestart={scanner.restart}
+                                                isCoolingDown={scanner.isCoolingDown}
+                                                cooldownTime={scanner.cooldownTime}
+                                            />}
                 {scanner.error && (
                     <div className="text-center text-destructive pt-4">
                         <h2 className="text-xl font-bold mb-2">Analysis Error</h2>

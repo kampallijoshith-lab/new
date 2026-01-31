@@ -97,7 +97,7 @@ const multiAgentAnalysisFlow = ai.defineFlow(
   async (input) => {
     // API Key Validation
     if (!process.env.GEMINI_API_KEY || !process.env.EXA_API_KEY || !process.env.GROQ_API_KEY) {
-        throw new Error("Missing required API keys (GEMINI_API_KEY, EXA_API_KEY, or GROQ_API_KEY) in environment variables.");
+        throw new Error("One or more API keys are missing from your .env file. Please ensure GEMINI_API_KEY, EXA_API_KEY, and GROQ_API_KEY are set and then restart your server.");
     }
 
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -153,7 +153,7 @@ ${researchData}
 
 3.  **Pharmacological Information:** Based on the identified drug from the research, provide: 'primaryUses', 'howItWorks', 'commonIndications', and a 'safetyDisclaimer'.
 
-4.  **Final Scoring & Verdict:** Calculate a final authenticity 'score' (0-100) based on a weighted combination of the comparative analysis results. Assign a final 'verdict' ('Authentic', 'Inconclusive', 'Counterfeit Risk') based on the score. A score > 85 is Authentic, > 65 is Inconclusive, and <= 65 is Counterfeit Risk.
+4.  **Final Scoring & Verdict:** Calculate a final authenticity 'score' (0-100) based on a weighted combination of the comparative analysis results. Assign a final 'verdict' ('Authentic', 'Inconclusive', 'Counterfeit Risk') based on the. A score > 85 is Authentic, > 65 is Inconclusive, and <= 65 is Counterfeit Risk.
 
 5.  **Final Touches:** Populate the 'timestamp' with the current ISO date and time, and create a unique 'scanId' (e.g., 'scan_' + current timestamp). Set the 'imprint' field in the final JSON to the one from the visual description.
 

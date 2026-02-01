@@ -9,6 +9,7 @@ const initialAnalysisSteps: AnalysisStep[] = [
   { title: 'Researching global health databases', status: 'pending', duration: 3000 },
   { title: 'Inspecting visual packaging quality', status: 'pending', duration: 3000 },
   { title: 'Synergizing all specialist findings', status: 'pending', duration: 1000 },
+  { title: 'Finalizing authenticity score and verdict...', status: 'pending', duration: 800 },
 ];
 
 const COOLDOWN_SECONDS = 15; 
@@ -82,6 +83,11 @@ export const useScanner = () => {
         updateStep(3, 'in-progress');
         await new Promise(r => setTimeout(r, 1000));
         updateStep(3, 'complete');
+
+        // Final Verdict Processing
+        updateStep(4, 'in-progress');
+        await new Promise(r => setTimeout(r, 800));
+        updateStep(4, 'complete');
 
         setAnalysisResult(result);
     } catch (e: any) {

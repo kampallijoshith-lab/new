@@ -8,16 +8,37 @@ export type MedicineInfo = {
   error?: string;
 };
 
-// Zod schema for input, can be used by the flow.
+// Zod schemas for multi-step analysis
+export const OCRResultSchema = z.object({
+    drugName: z.string(),
+    dosage: z.string(),
+    imprint: z.string(),
+    manufacturer: z.string(),
+});
+
+export const ResearchInterpretationSchema = z.object({
+    officialDescription: z.string(),
+    knownRecalls: z.array(z.string()),
+    pharmacology: z.object({
+        uses: z.string(),
+        howItWorks: z.string(),
+        indications: z.array(z.string()),
+    }),
+});
+
+export const VisualForensicSchema = z.object({
+    qualityScore: z.number(),
+    redFlags: z.array(z.string()),
+    physicalDesc: z.object({
+        color: z.string(),
+        shape: z.string(),
+    }),
+});
+
 export const ForensicAnalysisInputZodSchema = z.object({
-  photoDataUri: z
-    .string()
-    .describe(
-      "A photo of the medicine, as a data URI that must include a MIME type and use Base64 encoding."
-    ),
+  photoDataUri: z.string(),
 });
 export type ForensicAnalysisInput = z.infer<typeof ForensicAnalysisInputZodSchema>;
-
 
 export type Source = {
   uri: string;
@@ -46,23 +67,14 @@ export type CoreResults = {
   };
 };
 
-export type DetailedFactor = {
-  name: string;
-  status: 'match' | 'conflict' | 'omission';
-  evidence_quote?: string;
-};
-
-// This is now the single, unified result type from the master flow.
 export type ForensicAnalysisResult = {
   score: number;
   verdict: Verdict;
   imprint: string;
   sources?: Source[];
   coreResults: CoreResults;
-  detailed?: DetailedFactor[];
   timestamp: string;
   scanId: string;
-  // Merged from MedicineInfo
   primaryUses?: string;
   howItWorks?: string;
   commonIndications?: string[];
@@ -71,7 +83,6 @@ export type ForensicAnalysisResult = {
 };
 
 export type ScannerState = 'idle' | 'scanning' | 'analyzing' | 'results' | 'cooldown';
-
 export type AnalysisStepStatus = 'pending' | 'in-progress' | 'complete' | 'error';
 export interface AnalysisStep {
   title: string;
@@ -79,31 +90,11 @@ export interface AnalysisStep {
   duration: number;
 }
 
-export interface Question {
-  id: string;
-  text: string;
-  factor: keyof ResultData['manualFactors'];
-}
-
 export type Verdict = 'Authentic' | 'Inconclusive' | 'Counterfeit Risk';
 
-// This is legacy and can be removed later
 export interface ResultData {
   score: number;
   verdict: Verdict;
-  aiFactors: {
-    imprintAnalysis: { score: number; details: string };
-    packagingQuality: { score: number; details: string };
-    globalDatabaseCheck: { score: number; details: string };
-  };
-  manualFactors: {
-    price: { answer: boolean | null, weight: number };
-    source: { answer: boolean | null, weight: number };
-    packaging: { answer: boolean | null, weight: number };
-    seals: { answer: boolean | null, weight: number };
-    pharmacist: { answer: boolean | null, weight: number };
-    sideEffects: { answer: boolean | null, weight: number };
-    dosage: { answer: boolean | null, weight: number };
-    expiration: { answer: boolean | null, weight: number };
-  };
+  aiFactors: any;
+  manualFactors: any;
 }

@@ -1,52 +1,30 @@
 'use server';
 
-import type { ResultData, Verdict } from '@/lib/types';
+import { runAgentA, runAgentB, runAgentC, runMasterSynthesis } from '@/ai/flows/forensic-analysis-flow';
 
-// Placeholder for Firebase/backend logic
-export async function getAnalysisResults(
-  // In a real app, this would take image data and questionnaire answers
-  data: any
-): Promise<ResultData> {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  // Simulate a random result for demonstration
-  const score = Math.floor(Math.random() * 101);
-  let verdict: Verdict;
-  if (score >= 90) {
-    verdict = 'Authentic';
-  } else if (score >= 50) {
-    verdict = 'Inconclusive';
-  } else {
-    verdict = 'Counterfeit Risk';
-  }
+/**
+ * These individual actions allow the client to orchestrate a long-running 
+ * multi-agent flow step-by-step, staying within Vercel's 10s free-tier timeout.
+ */
 
-  return {
-    score,
-    verdict,
-    aiFactors: {
-      imprintAnalysis: { score: Math.random(), details: "Imprints match manufacturer's standard." },
-      packagingQuality: { score: Math.random(), details: 'Print quality and color consistency are high.' },
-      globalDatabaseCheck: { score: Math.random(), details: 'No red flags found in WHO or FDA databases.' },
-    },
-    manualFactors: {
-      price: { answer: true, weight: 0.1 },
-      source: { answer: true, weight: 0.2 },
-      packaging: { answer: true, weight: 0.15 },
-      seals: { answer: true, weight: 0.2 },
-      pharmacist: { answer: null, weight: 0.05 },
-      sideEffects: { answer: false, weight: 0.1 },
-      dosage: { answer: true, weight: 0.1 },
-      expiration: { answer: true, weight: 0.1 },
-    },
-  };
+export async function step1_OCR(photoDataUri: string) {
+    return await runAgentA(photoDataUri);
 }
 
-export async function reportCounterfeit(data: ResultData) {
-    // Placeholder function to report a counterfeit product
+export async function step2_Research(drugMetadata: any) {
+    return await runAgentB(drugMetadata);
+}
+
+export async function step3_Visual(photoDataUri: string) {
+    return await runAgentC(photoDataUri);
+}
+
+export async function step4_Synthesis(data: { metadata: any, research: any, visual: any }) {
+    return await runMasterSynthesis(data.metadata, data.research.interpreted, data.visual, data.research.rawSources);
+}
+
+export async function reportCounterfeit(data: any) {
     console.log("Reporting counterfeit product:", data);
-    // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log("Report submitted successfully.");
     return { success: true };
 }

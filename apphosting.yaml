@@ -5,3 +5,12 @@ runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
+  # Set memory to 1GB to handle multiple AI agent processes comfortably
+  memory: 1GiB
+  # CPU allocation
+  cpu: 1
+  # Timeout in seconds. 60s is usually enough for multi-agent synthesis.
+  timeoutSeconds: 60
+
+# Environment variables can be managed here or in the Firebase Console.
+# We recommend using the Firebase Console for sensitive API keys.

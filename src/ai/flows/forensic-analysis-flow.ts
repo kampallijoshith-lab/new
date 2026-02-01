@@ -7,7 +7,7 @@
  * 2. Agent B (Research Intelligence) & Agent C (Visual Forensic): Run in parallel.
  *    - Agent B uses Exa for raw data and Gemini B for medical interpretation.
  *    - Agent C uses Gemini C for deep visual forensic inspection.
- * 3. Master Synthesis (Groq): Combines all findings into the final verdict.
+ * 3. Master Synthesis (Groq): Combines ALL findings into the final verdict without loss.
  */
 
 import { ai, createSpecializedAi } from '@/ai/genkit';
@@ -70,18 +70,18 @@ const UnifiedAnalysisResultSchema = z.object({
 
 /**
  * AGENT A: The Vision OCR Specialist
- * Uses GEMINI_API_KEY_A
+ * Uses GEMINI_API_KEY_A (Falls back to GEMINI_API_KEY)
  */
 async function runAgentA(photoDataUri: string) {
     const aiA = createSpecializedAi(process.env.GEMINI_API_KEY_A);
     const { output } = await aiA.generate({
         prompt: [
-            { text: "Extract all textual information from this medicine packaging. Focus on Drug Name, Dosage, Imprint, and Manufacturer. Be precise." },
+            { text: "Extract all textual information from this medicine packaging. Focus on Drug Name, Dosage, Imprint, and Manufacturer. Be precise. If nothing is found, return empty strings." },
             { media: { url: photoDataUri, contentType: 'image/jpeg' } }
         ],
         output: { schema: OCRResultSchema, format: 'json' }
     });
-    if (!output) throw new Error("Agent A (Vision OCR) failed to extract metadata. Check GEMINI_API_KEY_A.");
+    if (!output) throw new Error("Agent A failed to extract metadata. Ensure GEMINI_API_KEY is valid.");
     return output;
 }
 
@@ -93,7 +93,7 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
     const exa = new Exa({ apiKey: process.env.EXA_API_KEY });
     const aiB = createSpecializedAi(process.env.GEMINI_API_KEY_B);
 
-    const query = `official product details, pill imprint, and packaging for ${drugInfo.drugName} ${drugInfo.dosage} by ${drugInfo.manufacturer}`;
+    const query = `official product details, pill imprint, and packaging for ${drugInfo.drugName} ${drugInfo.dosage} ${drugInfo.manufacturer}`;
     const exaResults = await exa.searchAndContents(query, {
         numResults: 3,
         highlights: true,
@@ -103,14 +103,14 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
     const context = exaResults.results.map(r => `Source: ${r.title}\nContent: ${r.highlights?.join("\n") || r.text}`).join('\n\n');
 
     const { output } = await aiB.generate({
-        prompt: `Based on the following search results for ${drugInfo.drugName}, provide a structured interpretation of its official physical characteristics and pharmacological data.
+        prompt: `Based on the following search results for ${drugInfo.drugName}, provide a structured interpretation of its official physical characteristics and pharmacological data. Do not omit any safety details.
         
         Search Results:
         ${context}`,
         output: { schema: ResearchInterpretationSchema, format: 'json' }
     });
 
-    if (!output) throw new Error("Agent B (Research) failed to interpret data. Check GEMINI_API_KEY_B.");
+    if (!output) throw new Error("Agent B (Research) failed to interpret data. Ensure EXA_API_KEY and GEMINI_API_KEY are valid.");
 
     return {
         interpreted: output,
@@ -126,12 +126,12 @@ async function runAgentC(photoDataUri: string) {
     const aiC = createSpecializedAi(process.env.GEMINI_API_KEY_C);
     const { output } = await aiC.generate({
         prompt: [
-            { text: "Analyze the visual integrity of this packaging. Check for blurry printing, misaligned logos, incorrect fonts, or tampered safety seals. Describe the color and shape of the medicine if visible." },
+            { text: "Analyze the visual integrity of this packaging. Check for blurry printing, misaligned logos, incorrect fonts, or tampered safety seals. Provide a detailed physical description based ONLY on what you see." },
             { media: { url: photoDataUri, contentType: 'image/jpeg' } }
         ],
         output: { schema: VisualForensicSchema, format: 'json' }
     });
-    if (!output) throw new Error("Agent C (Forensic) failed visual analysis. Check GEMINI_API_KEY_C.");
+    if (!output) throw new Error("Agent C (Forensic) failed visual analysis.");
     return output;
 }
 
@@ -149,7 +149,7 @@ const multiAgentAnalysisFlow = ai.defineFlow(
     // Step 1: Sequential OCR
     const drugMetadata = await runAgentA(input.photoDataUri);
 
-    // Step 2: Parallel Sprint
+    // Step 2: Parallel Sprint (Zero-Loss execution)
     const [researchTeamResult, visualForensics] = await Promise.all([
         runAgentB(drugMetadata),
         runAgentC(input.photoDataUri)
@@ -157,26 +157,31 @@ const multiAgentAnalysisFlow = ai.defineFlow(
 
     const { interpreted: research, rawSources } = researchTeamResult;
 
-    // Step 3: Master Synthesis (Groq)
+    // Step 3: Master Synthesis (Groq) - The Brain that combines everything
     const synthesisPrompt = `
-You are a Lead Pharmaceutical Forensic Orchestrator. Combine findings from three specialized agents into a final report JSON.
+You are a Lead Pharmaceutical Forensic Orchestrator. Combine findings from three specialized agents into a final report. DO NOT LOSE ANY INFORMATION.
 
-1. **OCR Data (Agent A):**
+1. **OCR Data (Agent A - Extraction):**
 - Name: ${drugMetadata.drugName}
 - Dosage: ${drugMetadata.dosage}
 - Imprint: ${drugMetadata.imprint}
+- Manufacturer: ${drugMetadata.manufacturer}
 
-2. **Ground Truth (Agent B):**
-- Official physical desc: ${research.officialDescription}
-- Recalls: ${research.knownRecalls.join(', ')}
+2. **Ground Truth (Agent B - Global Research):**
+- Official Physical Description: ${research.officialDescription}
+- Recalls/Threats: ${research.knownRecalls.join(', ')}
 - Pharmacology: ${research.pharmacology.uses}
+- How it Works: ${research.pharmacology.howItWorks}
+- Common Indications: ${research.pharmacology.indications.join(', ')}
 
-3. **Visual Inspection (Agent C):**
+3. **Visual Inspection (Agent C - Visual Forensics):**
 - Quality Score: ${visualForensics.qualityScore}
 - Red Flags: ${visualForensics.redFlags.join(', ')}
-- Observed physical: Color ${visualForensics.physicalDesc.color}, Shape ${visualForensics.physicalDesc.shape}
+- Observed Color: ${visualForensics.physicalDesc.color}
+- Observed Shape: ${visualForensics.physicalDesc.shape}
 
-**TASK:** Generate valid JSON. Compare OCR/Inspection vs Ground Truth. Mark 'match', 'conflict', or 'omission'. Calculate score (0-100) and verdict ('Authentic', 'Inconclusive', 'Counterfeit Risk').
+**TASK:** Generate a valid JSON final report. Compare Agent A/C findings against Agent B's Ground Truth. Calculate a total Authenticity Score (0-100) and Verdict. 
+Be rigorous. A mismatch in Imprint is a high-risk factor.
 `;
 
     const groqResponse = await groq.chat.completions.create({
@@ -187,7 +192,7 @@ You are a Lead Pharmaceutical Forensic Orchestrator. Combine findings from three
     });
 
     const finalReportText = groqResponse.choices[0]?.message?.content;
-    if (!finalReportText) throw new Error("Final synthesis failed on Groq.");
+    if (!finalReportText) throw new Error("Final synthesis failed on Groq. Ensure GROQ_API_KEY is valid.");
     
     const parsed = JSON.parse(finalReportText);
     parsed.timestamp = new Date().toISOString();
@@ -197,7 +202,7 @@ You are a Lead Pharmaceutical Forensic Orchestrator. Combine findings from three
     parsed.primaryUses = research.pharmacology.uses;
     parsed.howItWorks = research.pharmacology.howItWorks;
     parsed.commonIndications = research.pharmacology.indications;
-    parsed.safetyDisclaimer = "Disclaimer: This analysis is performed by multiple AI agents and is for informational purposes only. Always consult a healthcare professional.";
+    parsed.safetyDisclaimer = "Disclaimer: This analysis is performed by multiple specialized AI agents and is for informational purposes only. Always consult a healthcare professional before consuming medicine.";
 
     return UnifiedAnalysisResultSchema.parse(parsed);
   }

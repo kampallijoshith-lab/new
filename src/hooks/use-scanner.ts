@@ -5,14 +5,13 @@ import type { ScannerState, AnalysisStep, MedicineInfo, ForensicAnalysisResult }
 import { step1_OCR, step2_Research, step3_Visual, step4_Synthesis } from '@/app/actions';
 
 const initialAnalysisSteps: AnalysisStep[] = [
-  { title: 'Step 1: Extracting drug metadata', status: 'pending', duration: 0 },
-  { title: 'Step 2: Researching official records', status: 'pending', duration: 0 },
-  { title: 'Step 3: Visual forensic inspection', status: 'pending', duration: 0 },
-  { title: 'Step 4: Master AI Synthesis', status: 'pending', duration: 0 },
+  { title: 'Step 1: Extracting drug metadata (OCR)', status: 'pending', duration: 0 },
+  { title: 'Step 2: Researching official records (Exa)', status: 'pending', duration: 0 },
+  { title: 'Step 3: Visual forensic inspection (Vision)', status: 'pending', duration: 0 },
+  { title: 'Step 4: Master AI Synthesis (Groq)', status: 'pending', duration: 0 },
 ];
 
 const COOLDOWN_SECONDS = 5; 
-const COOLDOWN_STORAGE_KEY = 'medilens_cooldown_end';
 
 export const useScanner = () => {
   const [state, setState] = useState<ScannerState>('idle');
@@ -32,6 +31,7 @@ export const useScanner = () => {
     setState('analyzing');
     setError(null);
     setAnalysisResult(null);
+    setAnalysisSteps(initialAnalysisSteps.map(s => ({ ...s, status: 'pending' })));
 
     const updateStep = (index: number, status: AnalysisStep['status']) => {
         setAnalysisSteps(prev => prev.map((s, i) => i === index ? { ...s, status } : s));
@@ -44,18 +44,18 @@ export const useScanner = () => {
         if (metadata.error) throw new Error(metadata.error);
         updateStep(0, 'complete');
 
-        // STEP 2 & 3: Parallel Research and Visual (Individual requests)
+        // STEP 2: Research (Sequential to avoid 429)
         updateStep(1, 'in-progress');
-        updateStep(2, 'in-progress');
-        
-        const [research, visual] = await Promise.all([
-            step2_Research(metadata),
-            step3_Visual(nextImage)
-        ]);
-
+        const research = await step2_Research(metadata);
         if (research.error) throw new Error(research.error);
         updateStep(1, 'complete');
-        
+
+        // Small jitter delay to be extra safe with rate limits
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // STEP 3: Visual
+        updateStep(2, 'in-progress');
+        const visual = await step3_Visual(nextImage);
         if (visual.error) throw new Error(visual.error);
         updateStep(2, 'complete');
 
@@ -68,10 +68,11 @@ export const useScanner = () => {
         setAnalysisResult(final);
 
     } catch (e: any) {
-        setError(e.message || "An error occurred during analysis.");
+        const errorMessage = e.message || "An error occurred during analysis.";
+        setError(errorMessage);
+        // Mark failed steps
+        setAnalysisSteps(prev => prev.map(s => s.status === 'in-progress' ? { ...s, status: 'error' } : s));
     } finally {
-        const newCooldownEnd = Date.now() + COOLDOWN_SECONDS * 1000;
-        localStorage.setItem(COOLDOWN_STORAGE_KEY, newCooldownEnd.toString());
         setState('results');
         isProcessingRef.current = false;
     }

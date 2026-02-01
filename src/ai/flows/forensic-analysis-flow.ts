@@ -10,7 +10,7 @@ import Exa from 'exa-js';
 
 export async function runAgentA(photoDataUri: string) {
     const key = process.env.GEMINI_API_KEY_A || process.env.GEMINI_API_KEY;
-    if (!key) return { error: "Missing GEMINI_API_KEY_A" };
+    if (!key) return { error: "Missing GEMINI_API_KEY (Check your environment variables)" };
     
     try {
         const aiA = createSpecializedAi(key);
@@ -23,7 +23,7 @@ export async function runAgentA(photoDataUri: string) {
         });
         return output;
     } catch (e: any) {
-        return { error: `OCR Failed: ${e.message}` };
+        return { error: `OCR Agent Failed: ${e.message}` };
     }
 }
 
@@ -31,23 +31,27 @@ export async function runAgentB(drugInfo: any) {
     const exaKey = process.env.EXA_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY_B || process.env.GEMINI_API_KEY;
     
-    if (!exaKey) return { error: "Missing EXA_API_KEY" };
-    if (!geminiKey) return { error: "Missing GEMINI_API_KEY_B" };
+    if (!exaKey) return { error: "Missing EXA_API_KEY. Please add it to environment variables." };
+    if (!geminiKey) return { error: "Missing Gemini API Key for Research Agent." };
     
+    let exaResults;
     try {
-        const exa = new Exa({ apiKey: exaKey });
-        const aiB = createSpecializedAi(geminiKey);
-
-        const query = `official product details for ${drugInfo.drugName} ${drugInfo.dosage}`;
-        const exaResults = await exa.searchAndContents(query, {
+        const exa = new Exa({ apiKey: exaKey.trim() });
+        const query = `official product details for ${drugInfo.drugName} ${drugInfo.dosage} ${drugInfo.manufacturer}`;
+        exaResults = await exa.searchAndContents(query, {
             numResults: 2,
-            includeDomains: ["drugs.com", "fda.gov", "who.int"],
+            includeDomains: ["drugs.com", "fda.gov", "who.int", "medlineplus.gov"],
         });
+    } catch (e: any) {
+        return { error: `Exa Research Failed: Invalid EXA_API_KEY or search error. (${e.message})` };
+    }
 
+    try {
+        const aiB = createSpecializedAi(geminiKey);
         const context = exaResults.results.map(r => `Source: ${r.title}\nContent: ${r.text}`).join('\n\n');
 
         const { output } = await aiB.generate({
-            prompt: `Interpret physical and medical characteristics for ${drugInfo.drugName} from these results:\n${context}`,
+            prompt: `Interpret physical and medical characteristics for ${drugInfo.drugName} based on these search results. If the results are irrelevant, state what is missing.\n\nResults:\n${context}`,
             output: { schema: ResearchInterpretationSchema, format: 'json' }
         });
 
@@ -56,19 +60,19 @@ export async function runAgentB(drugInfo: any) {
             rawSources: exaResults.results.map(r => ({ uri: r.url, title: r.title, tier: 1 }))
         };
     } catch (e: any) {
-        return { error: `Research Failed: ${e.message}` };
+        return { error: `Gemini Research Interpretation Failed: ${e.message}` };
     }
 }
 
 export async function runAgentC(photoDataUri: string) {
     const key = process.env.GEMINI_API_KEY_C || process.env.GEMINI_API_KEY;
-    if (!key) return { error: "Missing GEMINI_API_KEY_C" };
+    if (!key) return { error: "Missing Gemini API Key for Visual Agent." };
 
     try {
         const aiC = createSpecializedAi(key);
         const { output } = await aiC.generate({
             prompt: [
-                { text: "Analyze packaging quality and pill appearance (color, shape). Look for blurry text or red flags." },
+                { text: "Analyze the packaging quality and pill appearance (color, shape, imprint) shown in the photo. Compare against standard medical manufacturing quality. Look for blurriness, spelling errors, or physical inconsistencies." },
                 { media: { url: photoDataUri, contentType: 'image/jpeg' } }
             ],
             output: { schema: VisualForensicSchema, format: 'json' }
@@ -81,17 +85,30 @@ export async function runAgentC(photoDataUri: string) {
 
 export async function runMasterSynthesis(metadata: any, research: any, visual: any, rawSources: any) {
     const groqKey = process.env.GROQ_API_KEY;
-    if (!groqKey) return { error: "Missing GROQ_API_KEY" };
+    if (!groqKey) return { error: "Missing GROQ_API_KEY for Synthesis." };
     
     try {
-        const groq = new Groq({ apiKey: groqKey });
+        const groq = new Groq({ apiKey: groqKey.trim() });
         const synthesisPrompt = `
-        As a Forensic Expert, analyze these findings and return a JSON report.
-        OCR: ${JSON.stringify(metadata)}
-        Research: ${JSON.stringify(research)}
-        Visual: ${JSON.stringify(visual)}
+        You are a Forensic Medical Expert. Analyze these findings and return a JSON report.
         
-        Required JSON fields: score (0-100), verdict ('Authentic', 'Inconclusive', 'Counterfeit Risk'), coreResults (imprint, color, shape, generic, source).
+        OCR DATA: ${JSON.stringify(metadata)}
+        RESEARCH DATA: ${JSON.stringify(research)}
+        VISUAL ANALYSIS: ${JSON.stringify(visual)}
+        
+        Compare the physical characteristics (color, shape, imprint) found in the photo (Visual) against the official records (Research).
+        
+        Required JSON format:
+        {
+          "score": number (0-100),
+          "verdict": "Authentic" | "Inconclusive" | "Counterfeit Risk",
+          "coreResults": {
+            "imprint": { "status": "match"|"conflict"|"omission", "reason": "...", "evidence_quote": "..." },
+            "color": { "status": "match"|"conflict"|"omission", "reason": "...", "evidence_quote": "..." },
+            "shape": { "status": "match"|"conflict"|"omission", "reason": "...", "evidence_quote": "..." },
+            "source": { "match": boolean, "reason": "..." }
+          }
+        }
         `;
 
         const groqResponse = await groq.chat.completions.create({
@@ -112,7 +129,7 @@ export async function runMasterSynthesis(metadata: any, research: any, visual: a
             primaryUses: research?.pharmacology?.uses,
             howItWorks: research?.pharmacology?.howItWorks,
             commonIndications: research?.pharmacology?.indications,
-            safetyDisclaimer: "Disclaimer: This AI analysis is for informational purposes only. Consult a doctor before use.",
+            safetyDisclaimer: "Disclaimer: This AI analysis is for informational purposes only and does not replace professional medical advice. If you suspect a counterfeit medicine, do not consume it.",
             analysisError: null
         };
     } catch (e: any) {

@@ -88,7 +88,9 @@ export const useScanner = () => {
         setAnalysisResult(result);
     } catch (e: any) {
         console.error("Multi-agent analysis failed:", e);
-        setError(e.message || 'Analysis failed. This usually means an API key is missing or a rate limit was hit. Ensure you have GEMINI_API_KEY_A, B, and C set.');
+        // Extract the most helpful error message
+        const errorMessage = e.message || 'Analysis failed. Check your API keys.';
+        setError(errorMessage);
     } finally {
         const newCooldownEnd = Date.now() + COOLDOWN_SECONDS * 1000;
         localStorage.setItem(COOLDOWN_STORAGE_KEY, newCooldownEnd.toString());

@@ -70,69 +70,80 @@ const UnifiedAnalysisResultSchema = z.object({
 
 /**
  * AGENT A: The Vision OCR Specialist
- * Uses GEMINI_API_KEY_A (Falls back to GEMINI_API_KEY)
  */
 async function runAgentA(photoDataUri: string) {
-    const aiA = createSpecializedAi(process.env.GEMINI_API_KEY_A);
-    const { output } = await aiA.generate({
-        prompt: [
-            { text: "Extract all textual information from this medicine packaging. Focus on Drug Name, Dosage, Imprint, and Manufacturer. Be precise. If nothing is found, return empty strings." },
-            { media: { url: photoDataUri, contentType: 'image/jpeg' } }
-        ],
-        output: { schema: OCRResultSchema, format: 'json' }
-    });
-    if (!output) throw new Error("Agent A failed to extract metadata. Ensure GEMINI_API_KEY is valid.");
-    return output;
+    try {
+        const aiA = createSpecializedAi(process.env.GEMINI_API_KEY_A);
+        const { output } = await aiA.generate({
+            prompt: [
+                { text: "Extract all textual information from this medicine packaging. Focus on Drug Name, Dosage, Imprint, and Manufacturer. Be precise. If nothing is found, return empty strings." },
+                { media: { url: photoDataUri, contentType: 'image/jpeg' } }
+            ],
+            output: { schema: OCRResultSchema, format: 'json' }
+        });
+        if (!output) throw new Error("Agent A failed to extract metadata.");
+        return output;
+    } catch (e: any) {
+        throw new Error(`Agent A (Vision OCR) failed: ${e.message}. Check GEMINI_API_KEY_A.`);
+    }
 }
 
 /**
  * AGENT B: The Research Intelligence Agent
- * Uses EXA + GEMINI_API_KEY_B
  */
 async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
-    const exa = new Exa({ apiKey: process.env.EXA_API_KEY });
-    const aiB = createSpecializedAi(process.env.GEMINI_API_KEY_B);
-
-    const query = `official product details, pill imprint, and packaging for ${drugInfo.drugName} ${drugInfo.dosage} ${drugInfo.manufacturer}`;
-    const exaResults = await exa.searchAndContents(query, {
-        numResults: 3,
-        highlights: true,
-        includeDomains: ["drugs.com", "dailymed.nlm.nih.gov", "fda.gov", "who.int"],
-    });
-
-    const context = exaResults.results.map(r => `Source: ${r.title}\nContent: ${r.highlights?.join("\n") || r.text}`).join('\n\n');
-
-    const { output } = await aiB.generate({
-        prompt: `Based on the following search results for ${drugInfo.drugName}, provide a structured interpretation of its official physical characteristics and pharmacological data. Do not omit any safety details.
+    try {
+        if (!process.env.EXA_API_KEY) throw new Error("EXA_API_KEY is missing.");
         
-        Search Results:
-        ${context}`,
-        output: { schema: ResearchInterpretationSchema, format: 'json' }
-    });
+        const exa = new Exa({ apiKey: process.env.EXA_API_KEY });
+        const aiB = createSpecializedAi(process.env.GEMINI_API_KEY_B);
 
-    if (!output) throw new Error("Agent B (Research) failed to interpret data. Ensure EXA_API_KEY and GEMINI_API_KEY are valid.");
+        const query = `official product details, pill imprint, and packaging for ${drugInfo.drugName} ${drugInfo.dosage} ${drugInfo.manufacturer}`;
+        const exaResults = await exa.searchAndContents(query, {
+            numResults: 3,
+            highlights: true,
+            includeDomains: ["drugs.com", "dailymed.nlm.nih.gov", "fda.gov", "who.int"],
+        });
 
-    return {
-        interpreted: output,
-        rawSources: exaResults.results.map(r => ({ uri: r.url, title: r.title, tier: 1 }))
-    };
+        const context = exaResults.results.map(r => `Source: ${r.title}\nContent: ${r.highlights?.join("\n") || r.text}`).join('\n\n');
+
+        const { output } = await aiB.generate({
+            prompt: `Based on the following search results for ${drugInfo.drugName}, provide a structured interpretation of its official physical characteristics and pharmacological data. Do not omit any safety details.
+            
+            Search Results:
+            ${context}`,
+            output: { schema: ResearchInterpretationSchema, format: 'json' }
+        });
+
+        if (!output) throw new Error("Agent B (Research) failed to interpret data.");
+
+        return {
+            interpreted: output,
+            rawSources: exaResults.results.map(r => ({ uri: r.url, title: r.title, tier: 1 }))
+        };
+    } catch (e: any) {
+        throw new Error(`Agent B (Research) failed: ${e.message}. Check EXA_API_KEY and GEMINI_API_KEY_B.`);
+    }
 }
 
 /**
  * AGENT C: The Visual Forensic Scientist
- * Uses GEMINI_API_KEY_C
  */
 async function runAgentC(photoDataUri: string) {
-    const aiC = createSpecializedAi(process.env.GEMINI_API_KEY_C);
-    const { output } = await aiC.generate({
-        prompt: [
-            { text: "Analyze the visual integrity of this packaging. Check for blurry printing, misaligned logos, incorrect fonts, or tampered safety seals. Provide a detailed physical description based ONLY on what you see." },
-            { media: { url: photoDataUri, contentType: 'image/jpeg' } }
-        ],
-        output: { schema: VisualForensicSchema, format: 'json' }
-    });
-    if (!output) throw new Error("Agent C (Forensic) failed visual analysis.");
-    return output;
+    try {
+        const aiC = createSpecializedAi(process.env.GEMINI_API_KEY_C);
+        const { output } = await aiC.generate({
+            prompt: [
+                { text: "Analyze the visual integrity of this packaging. Check for blurry printing, misaligned logos, incorrect fonts, or tampered safety seals. Provide a detailed physical description based ONLY on what you see." },
+                { media: { url: photoDataUri, contentType: 'image/jpeg' } }
+            ],
+            output: { schema: VisualForensicSchema, format: 'json' }
+        });
+        if (!output) throw new Error("Agent C (Forensic) failed visual analysis.");
+        return output;
+    } catch (e: any) {
+        throw new Error(`Agent C (Forensic) failed: ${e.message}. Check GEMINI_API_KEY_C.`);
+    }
 }
 
 // --- ORCHESTRATOR ---
@@ -144,6 +155,8 @@ const multiAgentAnalysisFlow = ai.defineFlow(
     outputSchema: UnifiedAnalysisResultSchema,
   },
   async (input) => {
+    if (!process.env.GROQ_API_KEY) throw new Error("GROQ_API_KEY is missing. Final synthesis cannot proceed.");
+    
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
     // Step 1: Sequential OCR
@@ -184,27 +197,31 @@ You are a Lead Pharmaceutical Forensic Orchestrator. Combine findings from three
 Be rigorous. A mismatch in Imprint is a high-risk factor.
 `;
 
-    const groqResponse = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: synthesisPrompt }],
-        model: 'llama3-70b-8192',
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-    });
+    try {
+        const groqResponse = await groq.chat.completions.create({
+            messages: [{ role: 'user', content: synthesisPrompt }],
+            model: 'llama3-70b-8192',
+            temperature: 0.1,
+            response_format: { type: "json_object" },
+        });
 
-    const finalReportText = groqResponse.choices[0]?.message?.content;
-    if (!finalReportText) throw new Error("Final synthesis failed on Groq. Ensure GROQ_API_KEY is valid.");
-    
-    const parsed = JSON.parse(finalReportText);
-    parsed.timestamp = new Date().toISOString();
-    parsed.scanId = 'scan_' + Date.now();
-    parsed.imprint = drugMetadata.imprint || 'NONE';
-    parsed.sources = rawSources;
-    parsed.primaryUses = research.pharmacology.uses;
-    parsed.howItWorks = research.pharmacology.howItWorks;
-    parsed.commonIndications = research.pharmacology.indications;
-    parsed.safetyDisclaimer = "Disclaimer: This analysis is performed by multiple specialized AI agents and is for informational purposes only. Always consult a healthcare professional before consuming medicine.";
+        const finalReportText = groqResponse.choices[0]?.message?.content;
+        if (!finalReportText) throw new Error("Final synthesis failed on Groq.");
+        
+        const parsed = JSON.parse(finalReportText);
+        parsed.timestamp = new Date().toISOString();
+        parsed.scanId = 'scan_' + Date.now();
+        parsed.imprint = drugMetadata.imprint || 'NONE';
+        parsed.sources = rawSources;
+        parsed.primaryUses = research.pharmacology.uses;
+        parsed.howItWorks = research.pharmacology.howItWorks;
+        parsed.commonIndications = research.pharmacology.indications;
+        parsed.safetyDisclaimer = "Disclaimer: This analysis is performed by multiple specialized AI agents and is for informational purposes only. Always consult a healthcare professional before consuming medicine.";
 
-    return UnifiedAnalysisResultSchema.parse(parsed);
+        return UnifiedAnalysisResultSchema.parse(parsed);
+    } catch (e: any) {
+        throw new Error(`Master Synthesis (Groq) failed: ${e.message}. Check GROQ_API_KEY.`);
+    }
   }
 );
 

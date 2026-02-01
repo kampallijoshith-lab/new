@@ -17,6 +17,10 @@ export function createSpecializedAi(apiKey: string | undefined) {
   // Use the specific key if provided, otherwise fall back to the main key.
   const finalKey = apiKey || process.env.GEMINI_API_KEY;
   
+  if (!finalKey) {
+    throw new Error("No Gemini API Key found. Please set GEMINI_API_KEY or the specialized agent keys (A, B, C).");
+  }
+
   return genkit({
     plugins: [googleAI({ 
       apiKey: finalKey,

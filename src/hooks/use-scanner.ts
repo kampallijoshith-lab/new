@@ -5,16 +5,16 @@ import type { ScannerState, AnalysisStep, MedicineInfo, ForensicAnalysisResult }
 import { forensicAnalysisFlow } from '@/ai/flows/forensic-analysis-flow';
 
 const initialAnalysisSteps: AnalysisStep[] = [
-  { title: 'Uploading and queueing image...', status: 'pending', duration: 500 },
-  { title: 'Performing unified analysis...', status: 'pending', duration: 2000 },
-  { title: 'Checking forensic quality...', status: 'pending', duration: 2000 },
-  { title: 'Extracting physical characteristics...', status: 'pending', duration: 2500 },
-  { title: 'Searching global medical databases...', status: 'pending', duration: 3000 },
-  { title: 'Cross-referencing and validating...', status: 'pending', duration: 2500 },
-  { title: 'Calculating authenticity score...', status: 'pending', duration: 1000 },
+  { title: 'Initializing multi-agent team...', status: 'pending', duration: 500 },
+  { title: 'Agent A: Extracting drug name and dosage...', status: 'pending', duration: 1500 },
+  { title: 'Parallel Sprint: Running Agents B (Research) and C (Forensic)...', status: 'pending', duration: 3000 },
+  { title: 'Agent B: Searching global health databases...', status: 'pending', duration: 1000 },
+  { title: 'Agent C: Inspecting visual packaging quality...', status: 'pending', duration: 1000 },
+  { title: 'Groq: Synthesizing final forensic verdict...', status: 'pending', duration: 2000 },
+  { title: 'Finalizing authenticity score...', status: 'pending', duration: 500 },
 ];
 
-const COOLDOWN_SECONDS = 60;
+const COOLDOWN_SECONDS = 30; // Reduced cooldown for better testing
 const COOLDOWN_STORAGE_KEY = 'medilens_cooldown_end';
 
 type InternalState = 'idle' | 'scanning' | 'analyzing' | 'results' | 'cooldown';
@@ -34,15 +34,15 @@ export const useScanner = () => {
 
   const processQueue = useCallback(async () => {
     if (isProcessingRef.current || imageQueue.length === 0) {
-      return; // Already processing or queue is empty
+      return; 
     }
 
     const now = Date.now();
     const cooldownEndTime = parseInt(localStorage.getItem(COOLDOWN_STORAGE_KEY) || '0', 10);
 
     if (now < cooldownEndTime) {
-      setState('cooldown'); // Ensure state reflects cooldown
-      return; // Still in cooldown
+      setState('cooldown');
+      return;
     }
     
     isProcessingRef.current = true;
@@ -55,30 +55,46 @@ export const useScanner = () => {
     setState('analyzing');
 
     let currentSteps = [...initialAnalysisSteps].map(s => ({ ...s, status: 'pending' as const }));
-    const runStep = async (index: number) => {
-        if (index < currentSteps.length) {
-            currentSteps = currentSteps.map((step, idx) => 
-                idx < index ? { ...step, status: 'complete' } :
-                idx === index ? { ...step, status: 'in-progress' } :
-                step
-            );
-            setAnalysisSteps(currentSteps);
-            await new Promise(resolve => setTimeout(resolve, currentSteps[index].duration));
-        }
+    
+    const updateStep = (index: number, status: AnalysisStep['status']) => {
+        currentSteps = currentSteps.map((step, idx) => 
+            idx === index ? { ...step, status } : step
+        );
+        setAnalysisSteps(currentSteps);
     };
-    
-    await runStep(0); // Uploading and queueing
-    
+
     try {
-        await runStep(1); // Performing unified analysis
-        const result = await forensicAnalysisFlow({ photoDataUri: nextImage });
-        await Promise.all([runStep(2), runStep(3), runStep(4), runStep(5), runStep(6)]);
+        updateStep(0, 'in-progress');
+        await new Promise(r => setTimeout(r, 500));
+        updateStep(0, 'complete');
+
+        updateStep(1, 'in-progress');
+        // The actual flow starts here
+        const analysisPromise = forensicAnalysisFlow({ photoDataUri: nextImage });
+        
+        // Simulating the parallel UI steps while the promise runs
+        await new Promise(r => setTimeout(r, 1500));
+        updateStep(1, 'complete');
+        updateStep(2, 'in-progress');
+        
+        await new Promise(r => setTimeout(r, 1000));
+        updateStep(3, 'in-progress');
+        updateStep(4, 'in-progress');
+        
+        const result = await analysisPromise;
+        
+        updateStep(2, 'complete');
+        updateStep(3, 'complete');
+        updateStep(4, 'complete');
+        updateStep(5, 'in-progress');
+        await new Promise(r => setTimeout(r, 1000));
+        updateStep(5, 'complete');
+        updateStep(6, 'complete');
 
         setAnalysisResult(result);
-        setAnalysisSteps(currentSteps.map(step => ({...step, status: 'complete'})));
     } catch (e: any) {
         console.error("Analysis failed:", e);
-        setError(e.message || 'An unexpected error occurred during analysis.');
+        setError(e.message || 'An unexpected error occurred during analysis. Please check your API keys and restart the server.');
     } finally {
         const newCooldownEnd = Date.now() + COOLDOWN_SECONDS * 1000;
         localStorage.setItem(COOLDOWN_STORAGE_KEY, newCooldownEnd.toString());
@@ -87,7 +103,6 @@ export const useScanner = () => {
   }, [imageQueue]);
 
 
-  // Cooldown Timer Management
   useEffect(() => {
     if (state === 'cooldown') {
       cooldownTimerRef.current = setInterval(() => {
@@ -100,7 +115,7 @@ export const useScanner = () => {
         } else {
           setCooldownTime(0);
           localStorage.removeItem(COOLDOWN_STORAGE_KEY);
-          setState('idle'); // Cooldown finished, ready for next manual start or queue processing
+          setState('idle');
         }
       }, 1000);
     } else {
@@ -109,20 +124,18 @@ export const useScanner = () => {
     return () => { if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current); };
   }, [state]);
 
-  // Main Processing Engine Trigger
   useEffect(() => {
     if (state === 'idle' && imageQueue.length > 0) {
       processQueue();
     }
   }, [state, imageQueue, processQueue]);
 
-  // Automatic Transition from Results to Cooldown
   useEffect(() => {
     if (state === 'results') {
       const timer = setTimeout(() => {
-        isProcessingRef.current = false; // Release lock
-        setState('cooldown'); // Start cooldown
-      }, 4000); // Display results for 4 seconds
+        isProcessingRef.current = false;
+        setState('cooldown');
+      }, 5000); 
       return () => clearTimeout(timer);
     }
   }, [state]);
@@ -139,13 +152,13 @@ export const useScanner = () => {
   const handleImageCapture = useCallback((imageDataUrl: string) => {
     if (state === 'cooldown' || isProcessingRef.current) return;
     setImageQueue([imageDataUrl]);
-    setState('idle'); // Let the engine pick it up
+    setState('idle');
   }, [state]);
 
   const handleMultipleImages = useCallback((imageDataUrls: string[]) => {
     if (state === 'cooldown' || isProcessingRef.current || imageDataUrls.length === 0) return;
     setImageQueue(imageDataUrls);
-    setState('idle'); // Let the engine pick it up
+    setState('idle');
   }, [state]);
 
   const restart = useCallback(() => {

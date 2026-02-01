@@ -1,93 +1,120 @@
 'use server';
 /**
- * @fileOverview A multi-agent forensic and pharmacological analysis flow.
- * This system uses a "Mixture of Experts" approach:
- * 1. Gemini: Acts as the "Vision Expert" to describe the pill image.
- * 2. Exa: Acts as the "Research Librarian" to find ground-truth data.
- * 3. Groq: Acts as the "Fast Analyst" to perform the final analysis and generate the report.
+ * @fileOverview Parallel Specialist Team Forensic Analysis.
+ * 
+ * Logic Flow:
+ * 1. Agent A (Vision): Extracts text/imprint from packaging (Sequential).
+ * 2. Agent B (Research) & Agent C (Forensic): Run in parallel.
+ *    - Agent B uses Exa to find ground-truth data for the drug name.
+ *    - Agent C analyzes visual characteristics (logos, seals, colors).
+ * 3. Master Synthesis (Groq): Combines all findings into the final verdict.
  */
 
-import { ai } from '@/ai/genkit';
+import { ai, createSpecializedAi } from '@/ai/genkit';
 import { z } from 'zod';
 import type { ForensicAnalysisInput, ForensicAnalysisResult } from '@/lib/types';
 import { ForensicAnalysisInputZodSchema } from '@/lib/types';
 import Groq from 'groq-sdk';
 import Exa from 'exa-js';
 
+// --- SCHEMAS ---
 
-// Helper to clean JSON from LLM responses.
-function cleanJSON(str: string): any {
-    if (!str) return null;
-    try {
-      const firstBrace = str.indexOf('{');
-      const lastBrace = str.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        str = str.substring(firstBrace, lastBrace + 1);
-      }
-      return JSON.parse(str.replace(/```json|```/g, '').trim());
-    } catch (e) {
-      console.error("Failed to parse JSON from LLM:", str, e);
-      return { analysisError: 'Failed to parse AI response. The response was not valid JSON.' };
-    }
-}
+const OCRResultSchema = z.object({
+    drugName: z.string().describe("The name of the drug found on the packaging."),
+    dosage: z.string().describe("The dosage (e.g., 500mg)."),
+    imprint: z.string().describe("Any imprint or codes detected."),
+    manufacturer: z.string().describe("The manufacturer name if visible."),
+});
 
-// Zod schema for the final, unified output.
+const VisualForensicSchema = z.object({
+    qualityScore: z.number().min(0).max(100).describe("Confidence in packaging visual integrity."),
+    redFlags: z.array(z.string()).describe("Any visual anomalies found (e.g., blurry text)."),
+    physicalDesc: z.object({
+        color: z.string(),
+        shape: z.string(),
+    }),
+});
+
 const UnifiedAnalysisResultSchema = z.object({
-    score: z.number().describe('The final authenticity score from 0-100.'),
-    verdict: z.enum(['Authentic', 'Inconclusive', 'Counterfeit Risk']).describe('The final verdict.'),
-    imprint: z.string().describe("The detected imprint on the pill. Can be 'NONE' if no imprint is visible."),
-    sources: z.array(z.object({
-        uri: z.string(),
-        title: z.string(),
-        tier: z.number(),
-    })).optional().describe('A list of sources used for ground truth data.'),
+    score: z.number(),
+    verdict: z.enum(['Authentic', 'Inconclusive', 'Counterfeit Risk']),
+    imprint: z.string(),
+    sources: z.array(z.object({ uri: z.string(), title: z.string(), tier: z.number() })).optional(),
     coreResults: z.object({
         imprint: z.object({ match: z.boolean(), status: z.string(), reason: z.string(), evidence_quote: z.string().optional() }),
         color: z.object({ match: z.boolean(), status: z.string(), reason: z.string(), evidence_quote: z.string().optional() }),
         shape: z.object({ match: z.boolean(), status: z.string(), reason: z.string(), evidence_quote: z.string().optional() }),
         generic: z.object({ match: z.boolean(), status: z.string(), reason: z.string(), evidence_quote: z.string().optional() }),
         source: z.object({ match: z.boolean(), reason: z.string() }),
-    }).describe('Breakdown of core forensic analysis results.'),
-    detailed: z.array(z.object({
-        name: z.string(),
-        status: z.string(),
-        evidence_quote: z.string().optional(),
-    })).optional().describe('Detailed factors from validation.'),
-    timestamp: z.string().describe('The ISO timestamp of the analysis.'),
-    scanId: z.string().describe('A unique ID for the scan.'),
-    primaryUses: z.string().optional().describe("What this medicine is typically prescribed for."),
-    howItWorks: z.string().optional().describe("A brief explanation of the mechanism."),
-    commonIndications: z.array(z.string()).optional().describe("A list of 3-4 specific conditions it treats."),
-    safetyDisclaimer: z.string().optional().describe("An explicit safety disclaimer."),
-    analysisError: z.string().optional().nullable().describe("If analysis fails, provide the reason here."),
+    }),
+    timestamp: z.string(),
+    scanId: z.string(),
+    primaryUses: z.string().optional(),
+    howItWorks: z.string().optional(),
+    commonIndications: z.array(z.string()).optional(),
+    safetyDisclaimer: z.string().optional(),
+    analysisError: z.string().optional().nullable(),
 });
 
+// --- AGENTS ---
 
-// Step 1: Gemini - The Vision Expert
-const visionInputSchema = z.object({
-    imprint: z.string().describe("The detected imprint on the pill. Can be 'NONE' if no imprint is visible."),
-    color: z.string().describe("The primary color of the pill."),
-    shape: z.string().describe("The shape of the pill (e.g., round, oval)."),
-});
+/**
+ * AGENT A: The Vision OCR Specialist
+ * Distributed to: GEMINI_API_KEY_A
+ */
+async function runAgentA(photoDataUri: string) {
+    const aiA = createSpecializedAi(process.env.GEMINI_API_KEY_A);
+    const { output } = await aiA.generate({
+        prompt: [
+            { text: "Extract all textual information from this medicine packaging. Focus on Drug Name, Dosage, and Manufacturer." },
+            { media: { url: photoDataUri, contentType: 'image/jpeg' } }
+        ],
+        output: { schema: OCRResultSchema, format: 'json' }
+    });
+    if (!output) throw new Error("Agent A failed to extract text.");
+    return output;
+}
 
-const visionPrompt = ai.definePrompt({
-    name: 'pillVisionPrompt',
-    input: { schema: ForensicAnalysisInputZodSchema },
-    output: { schema: visionInputSchema, format: 'json' },
-    model: 'googleai/gemini-2.5-flash',
-    prompt: `You are a machine vision expert. Look at the image of the medicine and describe its physical characteristics.
-Focus only on:
-1.  **Imprint:** Detect any text, logos, or numbers. If none, return 'NONE'.
-2.  **Color:** Identify the primary color.
-3.  **Shape:** Identify the pill's shape (e.g., round, oval, capsule).
-You MUST return ONLY a single, valid JSON object that strictly conforms to the provided schema. Do not include any explanatory text, markdown formatting, or any characters outside of the JSON object.
+/**
+ * AGENT B: The Research Librarian
+ * Distributed to: GEMINI_API_KEY_B + EXA
+ */
+async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
+    const exa = new Exa({ apiKey: process.env.EXA_API_KEY });
+    const query = `official product details and packaging for ${drugInfo.drugName} ${drugInfo.dosage} ${drugInfo.manufacturer}`;
+    
+    const exaResults = await exa.searchAndContents(query, {
+        numResults: 3,
+        highlights: true,
+        includeDomains: ["drugs.com", "dailymed.nlm.nih.gov", "fda.gov"],
+    });
 
-**Input Image:**
-{{media url=photoDataUri}}
-`,
-});
+    return exaResults.results.map(r => ({
+        title: r.title,
+        url: r.url,
+        content: r.highlights?.join("\n") || r.text || "",
+    }));
+}
 
-// Main orchestration flow
+/**
+ * AGENT C: The Visual Forensic Scientist
+ * Distributed to: GEMINI_API_KEY_C
+ */
+async function runAgentC(photoDataUri: string) {
+    const aiC = createSpecializedAi(process.env.GEMINI_API_KEY_C);
+    const { output } = await aiC.generate({
+        prompt: [
+            { text: "Analyze the visual quality of this medicine packaging. Check for font consistency, logo alignment, and seal integrity. Describe the physical characteristics of the pill if visible." },
+            { media: { url: photoDataUri, contentType: 'image/jpeg' } }
+        ],
+        output: { schema: VisualForensicSchema, format: 'json' }
+    });
+    if (!output) throw new Error("Agent C failed visual forensic analysis.");
+    return output;
+}
+
+// --- ORCHESTRATION ---
+
 const multiAgentAnalysisFlow = ai.defineFlow(
   {
     name: 'multiAgentAnalysisFlow',
@@ -95,110 +122,67 @@ const multiAgentAnalysisFlow = ai.defineFlow(
     outputSchema: UnifiedAnalysisResultSchema,
   },
   async (input) => {
-    // --- START: New, more robust API Key validation ---
-    const geminiKey = process.env.GEMINI_API_KEY;
-    const exaKey = process.env.EXA_API_KEY;
-    const groqKey = process.env.GROQ_API_KEY;
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    const missingKeys: string[] = [];
-    if (!geminiKey) missingKeys.push('GEMINI_API_KEY');
-    if (!exaKey) missingKeys.push('EXA_API_KEY');
-    if (!groqKey) missingKeys.push('GROQ_API_KEY');
+    // Step 1: Agent A (Sequential)
+    const drugMetadata = await runAgentA(input.photoDataUri);
 
-    if (missingKeys.length > 0) {
-      throw new Error(
-        `Configuration Error: The following API key(s) are missing from your environment: ${missingKeys.join(
-          ', '
-        )}. Please ensure they are in a .env file at the project root and that you have FULLY RESTARTED your server after adding them.`
-      );
-    }
-    // --- END: New validation ---
+    // Step 2 & 3: Parallel Sprint
+    // Running Research and Forensic analysis at the same time
+    const [researchResults, visualForensics] = await Promise.all([
+        runAgentB(drugMetadata),
+        runAgentC(input.photoDataUri)
+    ]);
 
-    const groq = new Groq({ apiKey: groqKey });
-    const exa = new Exa({ apiKey: exaKey });
-
-    // Step 1: Get visual description from Gemini
-    const visionResponse = await visionPrompt(input);
-    const visualDesc = visionResponse.output;
-    if (!visualDesc) {
-        throw new Error("Step 1 Failed: Could not get visual description from Gemini.");
-    }
+    // Step 4: Final Synthesis (Groq)
+    const researchSummary = researchResults.map(r => `Source: ${r.title}\nContent: ${r.content}`).join('\n\n');
     
-    // Step 2: Get research from Exa
-    const searchQuery = `official drug data for ${visualDesc.imprint} ${visualDesc.color} ${visualDesc.shape} pill`;
-    const exaResults = await exa.searchAndContents(searchQuery, {
-        numResults: 5,
-        highlights: true,
-        includeDomains: ["drugs.com", "dailymed.nlm.nih.gov", "webmd.com", "goodrx.com", "rxlist.com"],
-    });
+    const synthesisPrompt = `
+You are a Lead Pharmaceutical Forensic Orchestrator. Combine the findings from three specialized agents into a final report.
 
-    if (!exaResults || exaResults.results.length === 0) {
-        throw new Error("Step 2 Failed: Could not find any research data from Exa for the specified pill.");
-    }
+1. **OCR Data (Agent A):**
+- Name: ${drugMetadata.drugName}
+- Dosage: ${drugMetadata.dosage}
+- Imprint: ${drugMetadata.imprint}
 
-    const researchData = exaResults.results.map(r => ({
-      title: r.title,
-      url: r.url,
-      content: r.highlights?.join("\n") || r.text || "",
-    })).map(r => `Source: ${r.title} (${r.url})\nContent: ${r.content}`).join('\n\n---\n\n');
+2. **Ground Truth Research (Agent B):**
+${researchSummary}
 
+3. **Visual Forensic Analysis (Agent C):**
+- Quality Score: ${visualForensics.qualityScore}
+- Red Flags: ${visualForensics.redFlags.join(', ')}
+- Physical: ${visualForensics.physicalDesc.color} ${visualForensics.physicalDesc.shape}
 
-    // Step 3: Get final analysis from Groq
-    const analysisPrompt = `You are a world-class Pharmaceutical Forensic Analyst AI running on a high-speed inference engine.
-Your task is to provide a comprehensive, one-shot analysis of a pill based on a visual description and external research.
+**TASK:**
+Generate a final JSON report.
+- Compare Agent A and C against Agent B.
+- Determine if the imprints, colors, and names match the official data.
+- Calculate an overall authenticity score (0-100).
+- Assign a verdict: 'Authentic' (>85), 'Inconclusive' (65-85), or 'Counterfeit Risk' (<65).
+- Include pharmacolocial info (uses, how it works) found in the research.
 
-**IMPORTANT: You MUST return ONLY a single, valid JSON object that strictly conforms to the provided schema. Do not include any explanatory text, markdown formatting, or any characters outside of the JSON object.**
-
-**ANALYSIS DETAILS:**
-
-**1. Visual Description (from vision model):**
-- Imprint: "${visualDesc.imprint}"
-- Color: "${visualDesc.color}"
-- Shape: "${visualDesc.shape}"
-
-**2. Ground-Truth Research (from search model):**
-${researchData}
-
-**YOUR TASK:**
-
-1.  **Image Quality Gate:** You can assume the image quality is sufficient. 'analysisError' should be null unless there is a catastrophic failure in reasoning.
-
-2.  **Comparative Analysis:** Compare the Visual Description against the Ground-Truth Research. For each core feature (imprint, color, shape), determine the status: 'match', 'conflict', or 'omission'. Provide an 'evidence_quote' from the research for each decision.
-
-3.  **Pharmacological Information:** Based on the identified drug from the research, provide: 'primaryUses', 'howItWorks', 'commonIndications', and a 'safetyDisclaimer'.
-
-4.  **Final Scoring & Verdict:** Calculate a final authenticity 'score' (0-100) based on a weighted combination of the comparative analysis results. Assign a final 'verdict' ('Authentic', 'Inconclusive', 'Counterfeit Risk') based on the. A score > 85 is Authentic, > 65 is Inconclusive, and <= 65 is Counterfeit Risk.
-
-5.  **Final Touches:** Populate the 'timestamp' with the current ISO date and time, and create a unique 'scanId' (e.g., 'scan_' + current timestamp). Set the 'imprint' field in the final JSON to the one from the visual description.
-
-Now, perform the analysis and generate the JSON report.
+**IMPORTANT: Return ONLY valid JSON matching the schema.**
 `;
 
     const groqResponse = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: analysisPrompt }],
-        model: 'llama3-70b-8192', // A powerful model available on Groq
+        messages: [{ role: 'user', content: synthesisPrompt }],
+        model: 'llama3-70b-8192',
         temperature: 0.1,
         response_format: { type: "json_object" },
     });
 
     const finalReportText = groqResponse.choices[0]?.message?.content;
-    if (!finalReportText) {
-        throw new Error("Step 3 Failed: Did not receive a valid response from Groq.");
-    }
+    if (!finalReportText) throw new Error("Final synthesis failed.");
     
-    const finalReport = cleanJSON(finalReportText);
-    
-    // Validate the final object against our schema before returning.
-    return UnifiedAnalysisResultSchema.parse(finalReport);
+    const parsed = JSON.parse(finalReportText);
+    parsed.timestamp = new Date().toISOString();
+    parsed.scanId = 'scan_' + Date.now();
+    parsed.imprint = drugMetadata.imprint || 'NONE';
+
+    return UnifiedAnalysisResultSchema.parse(parsed);
   }
 );
 
-
-// This is the main function exported to the rest of the application.
-export async function forensicAnalysisFlow(
-  input: ForensicAnalysisInput
-): Promise<ForensicAnalysisResult> {
-  // We keep the original function signature so the UI doesn't need to change.
-  // It now calls our new multi-agent flow.
+export async function forensicAnalysisFlow(input: ForensicAnalysisInput): Promise<ForensicAnalysisResult> {
   return multiAgentAnalysisFlow(input);
 }

@@ -31,7 +31,8 @@ export async function runAgentB(drugInfo: any) {
     const exaKey = process.env.EXA_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY_B || process.env.GEMINI_API_KEY;
     
-    if (!exaKey || !geminiKey) return { error: "Missing Research Keys" };
+    if (!exaKey) return { error: "Missing EXA_API_KEY" };
+    if (!geminiKey) return { error: "Missing GEMINI_API_KEY_B" };
     
     try {
         const exa = new Exa({ apiKey: exaKey });

@@ -64,37 +64,22 @@ export const useScanner = () => {
     try {
         updateStep(0, 'in-progress');
         // Start the parallel multi-agent flow
-        const analysisPromise = forensicAnalysisFlow({ photoDataUri: nextImage });
+        const result = await forensicAnalysisFlow({ photoDataUri: nextImage });
         
-        // Wait for first step OCR (simulated timing for UI)
-        await new Promise(r => setTimeout(r, 1500));
+        // Progress UI steps
         updateStep(0, 'complete');
-
-        // Parallel Start: Researching and Inspecting
-        updateStep(1, 'in-progress');
-        updateStep(2, 'in-progress');
-        
-        const result = await analysisPromise;
-        
         updateStep(1, 'complete');
         updateStep(2, 'complete');
-        
-        // Final Synthesis
-        updateStep(3, 'in-progress');
-        await new Promise(r => setTimeout(r, 1000));
         updateStep(3, 'complete');
-
-        // Final Verdict Processing
-        updateStep(4, 'in-progress');
-        await new Promise(r => setTimeout(r, 800));
         updateStep(4, 'complete');
 
         setAnalysisResult(result);
+        if (result.analysisError) {
+            setError(result.analysisError);
+        }
     } catch (e: any) {
         console.error("Multi-agent analysis failed:", e);
-        // Extract the most helpful error message
-        const errorMessage = e.message || 'Analysis failed. Check your API keys.';
-        setError(errorMessage);
+        setError(e.message || 'Analysis failed unexpectedly.');
     } finally {
         const newCooldownEnd = Date.now() + COOLDOWN_SECONDS * 1000;
         localStorage.setItem(COOLDOWN_STORAGE_KEY, newCooldownEnd.toString());

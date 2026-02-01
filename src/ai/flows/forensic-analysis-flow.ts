@@ -13,7 +13,6 @@
 import { ai, createSpecializedAi } from '@/ai/genkit';
 import { z } from 'zod';
 import type { ForensicAnalysisInput, ForensicAnalysisResult } from '@/lib/types';
-import { ForensicAnalysisInputZodSchema } from '@/lib/types';
 import Groq from 'groq-sdk';
 import Exa from 'exa-js';
 
@@ -70,7 +69,7 @@ const UnifiedAnalysisResultSchema = z.object({
 
 async function runAgentA(photoDataUri: string) {
     const key = process.env.GEMINI_API_KEY_A || process.env.GEMINI_API_KEY;
-    if (!key) throw new Error("Missing GEMINI_API_KEY_A. Please configure it in your Vercel/environment settings.");
+    if (!key) throw new Error("Missing GEMINI_API_KEY_A. Please configure it in your Vercel settings.");
     
     try {
         const aiA = createSpecializedAi(key);
@@ -207,7 +206,6 @@ Calculate an Authenticity Score (0-100) and Verdict ('Authentic', 'Inconclusive'
         return UnifiedAnalysisResultSchema.parse(result);
     } catch (e: any) {
         // Return a safe error object instead of throwing
-        // This prevents the generic Next.js "omitted in production" error
         return {
             score: 0,
             verdict: 'Inconclusive',

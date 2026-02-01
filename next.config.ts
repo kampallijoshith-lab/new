@@ -8,13 +8,9 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Increase timeout for AI flows which can take significant time
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',
-      allowedOrigins: [],
-      // Note: Timeout configuration depends on Vercel plan, 
-      // but we signal Next.js to be patient.
     },
   },
   images: {

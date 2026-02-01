@@ -90,4 +90,7 @@ The core AI logic is managed by Genkit flows and other SDKs in `src/ai/flows/`.
 ## 📄 License
 
 This project is licensed under the MIT License.
-# medi-lens
+
+---
+
+Built with love ❤️ by JARVIS Team

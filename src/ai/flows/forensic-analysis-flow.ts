@@ -9,7 +9,7 @@ import Exa from 'exa-js';
 // --- AGENT RUNNERS ---
 
 export async function runAgentA(photoDataUri: string) {
-    const key = process.env.GEMINI_API_KEY_A || process.env.GEMINI_API_KEY;
+    const key = (process.env.GEMINI_API_KEY_A || process.env.GEMINI_API_KEY)?.trim();
     if (!key) return { error: "Missing GEMINI_API_KEY (Check your environment variables)" };
     
     try {
@@ -23,27 +23,27 @@ export async function runAgentA(photoDataUri: string) {
         });
         return output;
     } catch (e: any) {
-        return { error: `OCR Agent Failed: ${e.message}` };
+        return { error: `Agent A (OCR) failed: ${e.message}` };
     }
 }
 
 export async function runAgentB(drugInfo: any) {
-    const exaKey = process.env.EXA_API_KEY;
-    const geminiKey = process.env.GEMINI_API_KEY_B || process.env.GEMINI_API_KEY;
+    const exaKey = process.env.EXA_API_KEY?.trim();
+    const geminiKey = (process.env.GEMINI_API_KEY_B || process.env.GEMINI_API_KEY)?.trim();
     
-    if (!exaKey) return { error: "Missing EXA_API_KEY. Please add it to environment variables." };
-    if (!geminiKey) return { error: "Missing Gemini API Key for Research Agent." };
+    if (!exaKey) return { error: "Missing EXA_API_KEY in Vercel/Environment settings." };
+    if (!geminiKey) return { error: "Missing Gemini API Key for Agent B." };
     
     let exaResults;
     try {
-        const exa = new Exa({ apiKey: exaKey.trim() });
+        const exa = new Exa({ apiKey: exaKey });
         const query = `official product details for ${drugInfo.drugName} ${drugInfo.dosage} ${drugInfo.manufacturer}`;
         exaResults = await exa.searchAndContents(query, {
             numResults: 2,
             includeDomains: ["drugs.com", "fda.gov", "who.int", "medlineplus.gov"],
         });
     } catch (e: any) {
-        return { error: `Exa Research Failed: Invalid EXA_API_KEY or search error. (${e.message})` };
+        return { error: `Agent B (Research) - Exa Search failed: ${e.message}. (Check if your EXA_API_KEY is correct and active)` };
     }
 
     try {
@@ -60,13 +60,13 @@ export async function runAgentB(drugInfo: any) {
             rawSources: exaResults.results.map(r => ({ uri: r.url, title: r.title, tier: 1 }))
         };
     } catch (e: any) {
-        return { error: `Gemini Research Interpretation Failed: ${e.message}` };
+        return { error: `Agent B (Research) - Gemini Interpretation failed: ${e.message}` };
     }
 }
 
 export async function runAgentC(photoDataUri: string) {
-    const key = process.env.GEMINI_API_KEY_C || process.env.GEMINI_API_KEY;
-    if (!key) return { error: "Missing Gemini API Key for Visual Agent." };
+    const key = (process.env.GEMINI_API_KEY_C || process.env.GEMINI_API_KEY)?.trim();
+    if (!key) return { error: "Missing Gemini API Key for Agent C." };
 
     try {
         const aiC = createSpecializedAi(key);
@@ -79,16 +79,16 @@ export async function runAgentC(photoDataUri: string) {
         });
         return output;
     } catch (e: any) {
-        return { error: `Visual Analysis Failed: ${e.message}` };
+        return { error: `Agent C (Forensic) failed: ${e.message}` };
     }
 }
 
 export async function runMasterSynthesis(metadata: any, research: any, visual: any, rawSources: any) {
-    const groqKey = process.env.GROQ_API_KEY;
-    if (!groqKey) return { error: "Missing GROQ_API_KEY for Synthesis." };
+    const groqKey = process.env.GROQ_API_KEY?.trim();
+    if (!groqKey) return { error: "Missing GROQ_API_KEY for Agent D (Synthesis)." };
     
     try {
-        const groq = new Groq({ apiKey: groqKey.trim() });
+        const groq = new Groq({ apiKey: groqKey });
         const synthesisPrompt = `
         You are a Forensic Medical Expert. Analyze these findings and return a JSON report.
         
@@ -133,6 +133,6 @@ export async function runMasterSynthesis(metadata: any, research: any, visual: a
             analysisError: null
         };
     } catch (e: any) {
-        return { error: `Synthesis Failed: ${e.message}` };
+        return { error: `Agent D (Synthesis) failed: ${e.message}` };
     }
 }

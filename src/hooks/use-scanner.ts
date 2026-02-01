@@ -11,15 +11,12 @@ const initialAnalysisSteps: AnalysisStep[] = [
   { title: 'Step 4: Master AI Synthesis (Groq)', status: 'pending', duration: 0 },
 ];
 
-const COOLDOWN_SECONDS = 5; 
-
 export const useScanner = () => {
   const [state, setState] = useState<ScannerState>('idle');
   const [analysisResult, setAnalysisResult] = useState<ForensicAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [imageQueue, setImageQueue] = useState<string[]>([]);
   const [analysisSteps, setAnalysisSteps] = useState<AnalysisStep[]>(initialAnalysisSteps);
-  const [cooldownTime, setCooldownTime] = useState(0);
   const isProcessingRef = useRef(false);
 
   const processQueue = useCallback(async () => {
@@ -44,14 +41,17 @@ export const useScanner = () => {
         if (metadata.error) throw new Error(metadata.error);
         updateStep(0, 'complete');
 
-        // STEP 2: Research (Sequential to avoid 429)
+        // Small jitter delay to prevent rate limit bursts
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // STEP 2: Research
         updateStep(1, 'in-progress');
         const research = await step2_Research(metadata);
         if (research.error) throw new Error(research.error);
         updateStep(1, 'complete');
 
-        // Small jitter delay to be extra safe with rate limits
-        await new Promise(resolve => setTimeout(resolve, 800));
+        // Another small jitter delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // STEP 3: Visual
         updateStep(2, 'in-progress');
@@ -70,7 +70,6 @@ export const useScanner = () => {
     } catch (e: any) {
         const errorMessage = e.message || "An error occurred during analysis.";
         setError(errorMessage);
-        // Mark failed steps
         setAnalysisSteps(prev => prev.map(s => s.status === 'in-progress' ? { ...s, status: 'error' } : s));
     } finally {
         setState('results');
@@ -113,8 +112,6 @@ export const useScanner = () => {
     medicineInfo: analysisResult ? { ...analysisResult } : (error ? { error } : null),
     error,
     imageQueue,
-    isCoolingDown: state === 'cooldown',
-    cooldownTime,
     startScan,
     handleImageCapture,
     handleMultipleImages,

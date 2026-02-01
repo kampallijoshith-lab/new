@@ -5,16 +5,15 @@ import type { ScannerState, AnalysisStep, MedicineInfo, ForensicAnalysisResult }
 import { forensicAnalysisFlow } from '@/ai/flows/forensic-analysis-flow';
 
 const initialAnalysisSteps: AnalysisStep[] = [
-  { title: 'Initializing multi-agent team...', status: 'pending', duration: 500 },
-  { title: 'Agent A: Extracting drug name and dosage...', status: 'pending', duration: 1500 },
-  { title: 'Parallel Sprint: Running Agents B (Research) and C (Forensic)...', status: 'pending', duration: 3000 },
-  { title: 'Agent B: Searching global health databases...', status: 'pending', duration: 1000 },
-  { title: 'Agent C: Inspecting visual packaging quality...', status: 'pending', duration: 1000 },
+  { title: 'Agent A: Extracting drug name and dosage (Vision OCR)...', status: 'pending', duration: 1500 },
+  { title: 'Agent B: Researching global health databases (Interpreter)...', status: 'pending', duration: 3000 },
+  { title: 'Agent C: Inspecting visual packaging quality (Forensics)...', status: 'pending', duration: 3000 },
+  { title: 'Parallel Execution: Synergizing Agent Findings...', status: 'pending', duration: 500 },
   { title: 'Groq: Synthesizing final forensic verdict...', status: 'pending', duration: 2000 },
   { title: 'Finalizing authenticity score...', status: 'pending', duration: 500 },
 ];
 
-const COOLDOWN_SECONDS = 30; // Reduced cooldown for better testing
+const COOLDOWN_SECONDS = 15; 
 const COOLDOWN_STORAGE_KEY = 'medilens_cooldown_end';
 
 type InternalState = 'idle' | 'scanning' | 'analyzing' | 'results' | 'cooldown';
@@ -65,36 +64,33 @@ export const useScanner = () => {
 
     try {
         updateStep(0, 'in-progress');
-        await new Promise(r => setTimeout(r, 500));
-        updateStep(0, 'complete');
-
-        updateStep(1, 'in-progress');
-        // The actual flow starts here
+        // Start the backend flow
         const analysisPromise = forensicAnalysisFlow({ photoDataUri: nextImage });
         
-        // Simulating the parallel UI steps while the promise runs
+        // Step 0: Agent A
         await new Promise(r => setTimeout(r, 1500));
-        updateStep(1, 'complete');
+        updateStep(0, 'complete');
+
+        // Parallel Step Start
+        updateStep(1, 'in-progress');
         updateStep(2, 'in-progress');
-        
-        await new Promise(r => setTimeout(r, 1000));
         updateStep(3, 'in-progress');
-        updateStep(4, 'in-progress');
         
+        // Wait for actual results
         const result = await analysisPromise;
         
+        updateStep(1, 'complete');
         updateStep(2, 'complete');
         updateStep(3, 'complete');
-        updateStep(4, 'complete');
-        updateStep(5, 'in-progress');
+        updateStep(4, 'in-progress');
         await new Promise(r => setTimeout(r, 1000));
+        updateStep(4, 'complete');
         updateStep(5, 'complete');
-        updateStep(6, 'complete');
 
         setAnalysisResult(result);
     } catch (e: any) {
         console.error("Analysis failed:", e);
-        setError(e.message || 'An unexpected error occurred during analysis. Please check your API keys and restart the server.');
+        setError(e.message || 'Analysis failed. This usually means a provider hit a rate limit or a key is missing. Check your server logs.');
     } finally {
         const newCooldownEnd = Date.now() + COOLDOWN_SECONDS * 1000;
         localStorage.setItem(COOLDOWN_STORAGE_KEY, newCooldownEnd.toString());
@@ -135,7 +131,7 @@ export const useScanner = () => {
       const timer = setTimeout(() => {
         isProcessingRef.current = false;
         setState('cooldown');
-      }, 5000); 
+      }, 8000); // Give user time to see results
       return () => clearTimeout(timer);
     }
   }, [state]);

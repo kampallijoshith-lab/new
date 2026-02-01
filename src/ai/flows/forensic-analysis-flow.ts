@@ -68,12 +68,9 @@ const UnifiedAnalysisResultSchema = z.object({
 
 // --- SPECIALIZED AGENT RUNNERS ---
 
-/**
- * AGENT A: The Vision OCR Specialist
- */
 async function runAgentA(photoDataUri: string) {
     const key = process.env.GEMINI_API_KEY_A || process.env.GEMINI_API_KEY;
-    if (!key) throw new Error("Missing GEMINI_API_KEY_A. Please configure it in your environment.");
+    if (!key) throw new Error("Missing GEMINI_API_KEY_A. Please configure it in your Vercel/environment settings.");
     
     try {
         const aiA = createSpecializedAi(key);
@@ -91,15 +88,12 @@ async function runAgentA(photoDataUri: string) {
     }
 }
 
-/**
- * AGENT B: The Research Intelligence Agent
- */
 async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
     const exaKey = process.env.EXA_API_KEY;
     const geminiKey = process.env.GEMINI_API_KEY_B || process.env.GEMINI_API_KEY;
     
-    if (!exaKey) throw new Error("Missing EXA_API_KEY. Please configure it in your environment.");
-    if (!geminiKey) throw new Error("Missing GEMINI_API_KEY_B. Please configure it in your environment.");
+    if (!exaKey) throw new Error("Missing EXA_API_KEY. Please configure it in your Vercel settings.");
+    if (!geminiKey) throw new Error("Missing GEMINI_API_KEY_B. Please configure it in your Vercel settings.");
     
     try {
         const exa = new Exa({ apiKey: exaKey });
@@ -115,7 +109,7 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
         const context = exaResults.results.map(r => `Source: ${r.title}\nContent: ${r.highlights?.join("\n") || r.text}`).join('\n\n');
 
         const { output } = await aiB.generate({
-            prompt: `Based on the following search results for ${drugInfo.drugName}, provide a structured interpretation of its official physical characteristics and pharmacological data. Do not omit any safety details.
+            prompt: `Based on the following search results for ${drugInfo.drugName}, provide a structured interpretation of its official physical characteristics and pharmacological data.
             
             Search Results:
             ${context}`,
@@ -133,12 +127,9 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
     }
 }
 
-/**
- * AGENT C: The Visual Forensic Scientist
- */
 async function runAgentC(photoDataUri: string) {
     const key = process.env.GEMINI_API_KEY_C || process.env.GEMINI_API_KEY;
-    if (!key) throw new Error("Missing GEMINI_API_KEY_C. Please configure it in your environment.");
+    if (!key) throw new Error("Missing GEMINI_API_KEY_C. Please configure it in your Vercel settings.");
 
     try {
         const aiC = createSpecializedAi(key);
@@ -158,57 +149,35 @@ async function runAgentC(photoDataUri: string) {
 
 // --- ORCHESTRATOR ---
 
-const multiAgentAnalysisFlow = ai.defineFlow(
-  {
-    name: 'multiAgentAnalysisFlow',
-    inputSchema: ForensicAnalysisInputZodSchema,
-    outputSchema: UnifiedAnalysisResultSchema,
-  },
-  async (input) => {
-    const groqKey = process.env.GROQ_API_KEY;
-    if (!groqKey) throw new Error("Missing GROQ_API_KEY. Please configure it in your environment.");
-    
-    const groq = new Groq({ apiKey: groqKey });
+export async function forensicAnalysisFlow(input: ForensicAnalysisInput): Promise<ForensicAnalysisResult> {
+    try {
+        const groqKey = process.env.GROQ_API_KEY;
+        if (!groqKey) throw new Error("Missing GROQ_API_KEY. Please configure it in your Vercel settings.");
+        
+        const groq = new Groq({ apiKey: groqKey });
 
-    // Step 1: Sequential OCR
-    const drugMetadata = await runAgentA(input.photoDataUri);
+        // Step 1: Sequential OCR
+        const drugMetadata = await runAgentA(input.photoDataUri);
 
-    // Step 2: Parallel Sprint (Zero-Loss execution)
-    const [researchTeamResult, visualForensics] = await Promise.all([
-        runAgentB(drugMetadata),
-        runAgentC(input.photoDataUri)
-    ]);
+        // Step 2: Parallel Sprint
+        const [researchTeamResult, visualForensics] = await Promise.all([
+            runAgentB(drugMetadata),
+            runAgentC(input.photoDataUri)
+        ]);
 
-    const { interpreted: research, rawSources } = researchTeamResult;
+        const { interpreted: research, rawSources } = researchTeamResult;
 
-    // Step 3: Master Synthesis (Groq) - The Brain that combines everything
-    const synthesisPrompt = `
-You are a Lead Pharmaceutical Forensic Orchestrator. Combine findings from three specialized agents into a final report. DO NOT LOSE ANY INFORMATION.
+        // Step 3: Master Synthesis (Groq)
+        const synthesisPrompt = `
+You are a Lead Pharmaceutical Forensic Orchestrator. Generate a valid JSON final report.
 
-1. **OCR Data (Agent A - Extraction):**
-- Name: ${drugMetadata.drugName}
-- Dosage: ${drugMetadata.dosage}
-- Imprint: ${drugMetadata.imprint}
-- Manufacturer: ${drugMetadata.manufacturer}
+OCR Data: ${JSON.stringify(drugMetadata)}
+Research: ${JSON.stringify(research)}
+Visual: ${JSON.stringify(visualForensics)}
 
-2. **Ground Truth (Agent B - Global Research):**
-- Official Physical Description: ${research.officialDescription}
-- Recalls/Threats: ${research.knownRecalls.join(', ')}
-- Pharmacology: ${research.pharmacology.uses}
-- How it Works: ${research.pharmacology.howItWorks}
-- Common Indications: ${research.pharmacology.indications.join(', ')}
-
-3. **Visual Inspection (Agent C - Visual Forensics):**
-- Quality Score: ${visualForensics.qualityScore}
-- Red Flags: ${visualForensics.redFlags.join(', ')}
-- Observed Color: ${visualForensics.physicalDesc.color}
-- Observed Shape: ${visualForensics.physicalDesc.shape}
-
-**TASK:** Generate a valid JSON final report. Compare Agent A/C findings against Agent B's Ground Truth. Calculate a total Authenticity Score (0-100) and Verdict. 
-Be rigorous. A mismatch in Imprint is a high-risk factor.
+Calculate an Authenticity Score (0-100) and Verdict ('Authentic', 'Inconclusive', 'Counterfeit Risk').
 `;
 
-    try {
         const groqResponse = await groq.chat.completions.create({
             messages: [{ role: 'user', content: synthesisPrompt }],
             model: 'llama3-70b-8192',
@@ -220,22 +189,39 @@ Be rigorous. A mismatch in Imprint is a high-risk factor.
         if (!finalReportText) throw new Error("Final synthesis failed on Groq.");
         
         const parsed = JSON.parse(finalReportText);
-        parsed.timestamp = new Date().toISOString();
-        parsed.scanId = 'scan_' + Date.now();
-        parsed.imprint = drugMetadata.imprint || 'NONE';
-        parsed.sources = rawSources;
-        parsed.primaryUses = research.pharmacology.uses;
-        parsed.howItWorks = research.pharmacology.howItWorks;
-        parsed.commonIndications = research.pharmacology.indications;
-        parsed.safetyDisclaimer = "Disclaimer: This analysis is performed by multiple specialized AI agents and is for informational purposes only. Always consult a healthcare professional before consuming medicine.";
+        
+        // Add required fields for UI
+        const result: ForensicAnalysisResult = {
+            ...parsed,
+            timestamp: new Date().toISOString(),
+            scanId: 'scan_' + Date.now(),
+            imprint: drugMetadata.imprint || 'NONE',
+            sources: rawSources,
+            primaryUses: research.pharmacology.uses,
+            howItWorks: research.pharmacology.howItWorks,
+            commonIndications: research.pharmacology.indications,
+            safetyDisclaimer: "Disclaimer: This analysis is performed by AI agents and is for informational purposes only. Consult a healthcare professional before consuming medicine.",
+            analysisError: null
+        };
 
-        return UnifiedAnalysisResultSchema.parse(parsed);
+        return UnifiedAnalysisResultSchema.parse(result);
     } catch (e: any) {
-        throw new Error(`Master Synthesis (Groq) failed: ${e.message}`);
+        // Return a safe error object instead of throwing
+        // This prevents the generic Next.js "omitted in production" error
+        return {
+            score: 0,
+            verdict: 'Inconclusive',
+            imprint: 'N/A',
+            timestamp: new Date().toISOString(),
+            scanId: 'error_' + Date.now(),
+            analysisError: e.message || "An unexpected error occurred during multi-agent analysis.",
+            coreResults: {
+                imprint: { match: false, status: 'omission', reason: 'Analysis failed' },
+                color: { match: false, status: 'omission', reason: 'Analysis failed' },
+                shape: { match: false, status: 'omission', reason: 'Analysis failed' },
+                generic: { match: false, status: 'omission', reason: 'Analysis failed' },
+                source: { match: false, reason: 'Analysis failed' }
+            }
+        } as ForensicAnalysisResult;
     }
-  }
-);
-
-export async function forensicAnalysisFlow(input: ForensicAnalysisInput): Promise<ForensicAnalysisResult> {
-  return multiAgentAnalysisFlow(input);
 }

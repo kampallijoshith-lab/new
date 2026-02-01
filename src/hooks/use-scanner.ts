@@ -5,11 +5,10 @@ import type { ScannerState, AnalysisStep, MedicineInfo, ForensicAnalysisResult }
 import { forensicAnalysisFlow } from '@/ai/flows/forensic-analysis-flow';
 
 const initialAnalysisSteps: AnalysisStep[] = [
-  { title: 'Agent A: Extracting drug name and dosage (Vision OCR)...', status: 'pending', duration: 1500 },
-  { title: 'Agent B: Researching global health databases (Investigator)...', status: 'pending', duration: 3000 },
-  { title: 'Agent C: Inspecting visual packaging quality (Forensics)...', status: 'pending', duration: 3000 },
-  { title: 'Master Orchestrator: Synergizing all specialist findings...', status: 'pending', duration: 1000 },
-  { title: 'Finalizing authenticity score and verdict...', status: 'pending', duration: 500 },
+  { title: 'Extracting drug name and dosage', status: 'pending', duration: 1500 },
+  { title: 'Researching global health databases', status: 'pending', duration: 3000 },
+  { title: 'Inspecting visual packaging quality', status: 'pending', duration: 3000 },
+  { title: 'Synergizing all specialist findings', status: 'pending', duration: 1000 },
 ];
 
 const COOLDOWN_SECONDS = 15; 
@@ -70,7 +69,7 @@ export const useScanner = () => {
         await new Promise(r => setTimeout(r, 1500));
         updateStep(0, 'complete');
 
-        // Parallel Start: Agents B and C
+        // Parallel Start: Researching and Inspecting
         updateStep(1, 'in-progress');
         updateStep(2, 'in-progress');
         
@@ -83,7 +82,6 @@ export const useScanner = () => {
         updateStep(3, 'in-progress');
         await new Promise(r => setTimeout(r, 1000));
         updateStep(3, 'complete');
-        updateStep(4, 'complete');
 
         setAnalysisResult(result);
     } catch (e: any) {

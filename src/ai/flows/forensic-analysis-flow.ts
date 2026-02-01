@@ -72,8 +72,11 @@ const UnifiedAnalysisResultSchema = z.object({
  * AGENT A: The Vision OCR Specialist
  */
 async function runAgentA(photoDataUri: string) {
+    const key = process.env.GEMINI_API_KEY_A || process.env.GEMINI_API_KEY;
+    if (!key) throw new Error("Missing GEMINI_API_KEY_A. Please configure it in your environment.");
+    
     try {
-        const aiA = createSpecializedAi(process.env.GEMINI_API_KEY_A);
+        const aiA = createSpecializedAi(key);
         const { output } = await aiA.generate({
             prompt: [
                 { text: "Extract all textual information from this medicine packaging. Focus on Drug Name, Dosage, Imprint, and Manufacturer. Be precise. If nothing is found, return empty strings." },
@@ -84,7 +87,7 @@ async function runAgentA(photoDataUri: string) {
         if (!output) throw new Error("Agent A failed to extract metadata.");
         return output;
     } catch (e: any) {
-        throw new Error(`Agent A (Vision OCR) failed: ${e.message}. Check GEMINI_API_KEY_A.`);
+        throw new Error(`Agent A (Vision OCR) failed: ${e.message}`);
     }
 }
 
@@ -92,11 +95,15 @@ async function runAgentA(photoDataUri: string) {
  * AGENT B: The Research Intelligence Agent
  */
 async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
+    const exaKey = process.env.EXA_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY_B || process.env.GEMINI_API_KEY;
+    
+    if (!exaKey) throw new Error("Missing EXA_API_KEY. Please configure it in your environment.");
+    if (!geminiKey) throw new Error("Missing GEMINI_API_KEY_B. Please configure it in your environment.");
+    
     try {
-        if (!process.env.EXA_API_KEY) throw new Error("EXA_API_KEY is missing.");
-        
-        const exa = new Exa({ apiKey: process.env.EXA_API_KEY });
-        const aiB = createSpecializedAi(process.env.GEMINI_API_KEY_B);
+        const exa = new Exa({ apiKey: exaKey });
+        const aiB = createSpecializedAi(geminiKey);
 
         const query = `official product details, pill imprint, and packaging for ${drugInfo.drugName} ${drugInfo.dosage} ${drugInfo.manufacturer}`;
         const exaResults = await exa.searchAndContents(query, {
@@ -122,7 +129,7 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
             rawSources: exaResults.results.map(r => ({ uri: r.url, title: r.title, tier: 1 }))
         };
     } catch (e: any) {
-        throw new Error(`Agent B (Research) failed: ${e.message}. Check EXA_API_KEY and GEMINI_API_KEY_B.`);
+        throw new Error(`Agent B (Research) failed: ${e.message}`);
     }
 }
 
@@ -130,8 +137,11 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
  * AGENT C: The Visual Forensic Scientist
  */
 async function runAgentC(photoDataUri: string) {
+    const key = process.env.GEMINI_API_KEY_C || process.env.GEMINI_API_KEY;
+    if (!key) throw new Error("Missing GEMINI_API_KEY_C. Please configure it in your environment.");
+
     try {
-        const aiC = createSpecializedAi(process.env.GEMINI_API_KEY_C);
+        const aiC = createSpecializedAi(key);
         const { output } = await aiC.generate({
             prompt: [
                 { text: "Analyze the visual integrity of this packaging. Check for blurry printing, misaligned logos, incorrect fonts, or tampered safety seals. Provide a detailed physical description based ONLY on what you see." },
@@ -142,7 +152,7 @@ async function runAgentC(photoDataUri: string) {
         if (!output) throw new Error("Agent C (Forensic) failed visual analysis.");
         return output;
     } catch (e: any) {
-        throw new Error(`Agent C (Forensic) failed: ${e.message}. Check GEMINI_API_KEY_C.`);
+        throw new Error(`Agent C (Forensic) failed: ${e.message}`);
     }
 }
 
@@ -155,9 +165,10 @@ const multiAgentAnalysisFlow = ai.defineFlow(
     outputSchema: UnifiedAnalysisResultSchema,
   },
   async (input) => {
-    if (!process.env.GROQ_API_KEY) throw new Error("GROQ_API_KEY is missing. Final synthesis cannot proceed.");
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!groqKey) throw new Error("Missing GROQ_API_KEY. Please configure it in your environment.");
     
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const groq = new Groq({ apiKey: groqKey });
 
     // Step 1: Sequential OCR
     const drugMetadata = await runAgentA(input.photoDataUri);
@@ -220,7 +231,7 @@ Be rigorous. A mismatch in Imprint is a high-risk factor.
 
         return UnifiedAnalysisResultSchema.parse(parsed);
     } catch (e: any) {
-        throw new Error(`Master Synthesis (Groq) failed: ${e.message}. Check GROQ_API_KEY.`);
+        throw new Error(`Master Synthesis (Groq) failed: ${e.message}`);
     }
   }
 );

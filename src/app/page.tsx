@@ -12,6 +12,9 @@ import { LiveAlertsTicker } from '@/components/medilens/live-alerts-ticker';
 import InteractiveBackground from '@/components/medilens/interactive-background';
 import { Separator } from '@/components/ui/separator';
 
+// Configuration for route timeout
+export const maxDuration = 60;
+
 export default function Home() {
   const scanner = useScanner();
 

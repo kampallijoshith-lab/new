@@ -70,7 +70,7 @@ const UnifiedAnalysisResultSchema = z.object({
 
 /**
  * AGENT A: The Vision OCR Specialist
- * Distributed to: GEMINI_API_KEY_A
+ * Uses GEMINI_API_KEY_A
  */
 async function runAgentA(photoDataUri: string) {
     const aiA = createSpecializedAi(process.env.GEMINI_API_KEY_A);
@@ -81,19 +81,18 @@ async function runAgentA(photoDataUri: string) {
         ],
         output: { schema: OCRResultSchema, format: 'json' }
     });
-    if (!output) throw new Error("Agent A (Vision OCR) failed to extract metadata.");
+    if (!output) throw new Error("Agent A (Vision OCR) failed to extract metadata. Check GEMINI_API_KEY_A.");
     return output;
 }
 
 /**
  * AGENT B: The Research Intelligence Agent
- * Distributed to: EXA + GEMINI_API_KEY_B
+ * Uses EXA + GEMINI_API_KEY_B
  */
 async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
     const exa = new Exa({ apiKey: process.env.EXA_API_KEY });
     const aiB = createSpecializedAi(process.env.GEMINI_API_KEY_B);
 
-    // 1. Search for ground truth
     const query = `official product details, pill imprint, and packaging for ${drugInfo.drugName} ${drugInfo.dosage} by ${drugInfo.manufacturer}`;
     const exaResults = await exa.searchAndContents(query, {
         numResults: 3,
@@ -103,7 +102,6 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
 
     const context = exaResults.results.map(r => `Source: ${r.title}\nContent: ${r.highlights?.join("\n") || r.text}`).join('\n\n');
 
-    // 2. Interpret research using Gemini Key B
     const { output } = await aiB.generate({
         prompt: `Based on the following search results for ${drugInfo.drugName}, provide a structured interpretation of its official physical characteristics and pharmacological data.
         
@@ -112,7 +110,7 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
         output: { schema: ResearchInterpretationSchema, format: 'json' }
     });
 
-    if (!output) throw new Error("Agent B (Research) failed to interpret data.");
+    if (!output) throw new Error("Agent B (Research) failed to interpret data. Check GEMINI_API_KEY_B.");
 
     return {
         interpreted: output,
@@ -122,7 +120,7 @@ async function runAgentB(drugInfo: z.infer<typeof OCRResultSchema>) {
 
 /**
  * AGENT C: The Visual Forensic Scientist
- * Distributed to: GEMINI_API_KEY_C
+ * Uses GEMINI_API_KEY_C
  */
 async function runAgentC(photoDataUri: string) {
     const aiC = createSpecializedAi(process.env.GEMINI_API_KEY_C);
@@ -133,7 +131,7 @@ async function runAgentC(photoDataUri: string) {
         ],
         output: { schema: VisualForensicSchema, format: 'json' }
     });
-    if (!output) throw new Error("Agent C (Forensic) failed visual analysis.");
+    if (!output) throw new Error("Agent C (Forensic) failed visual analysis. Check GEMINI_API_KEY_C.");
     return output;
 }
 
@@ -148,10 +146,10 @@ const multiAgentAnalysisFlow = ai.defineFlow(
   async (input) => {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    // Step 1: Sequential OCR (Needs to know WHAT the drug is)
+    // Step 1: Sequential OCR
     const drugMetadata = await runAgentA(input.photoDataUri);
 
-    // Step 2: Parallel Sprint (Research and Forensics run simultaneously)
+    // Step 2: Parallel Sprint
     const [researchTeamResult, visualForensics] = await Promise.all([
         runAgentB(drugMetadata),
         runAgentC(input.photoDataUri)
@@ -160,35 +158,25 @@ const multiAgentAnalysisFlow = ai.defineFlow(
     const { interpreted: research, rawSources } = researchTeamResult;
 
     // Step 3: Master Synthesis (Groq)
-    // We send all specific findings to Groq to generate the final verdict JSON.
     const synthesisPrompt = `
-You are a Lead Pharmaceutical Forensic Orchestrator. Combine the findings from three specialized agents into a final report.
+You are a Lead Pharmaceutical Forensic Orchestrator. Combine findings from three specialized agents into a final report JSON.
 
-1. **OCR Data (Agent A - Extraction):**
+1. **OCR Data (Agent A):**
 - Name: ${drugMetadata.drugName}
 - Dosage: ${drugMetadata.dosage}
-- Imprint found on package: ${drugMetadata.imprint}
+- Imprint: ${drugMetadata.imprint}
 
-2. **Ground Truth Intelligence (Agent B - Interpretation):**
-- Official Pill/Box Description: ${research.officialDescription}
-- Known Recalls: ${research.knownRecalls.join(', ')}
+2. **Ground Truth (Agent B):**
+- Official physical desc: ${research.officialDescription}
+- Recalls: ${research.knownRecalls.join(', ')}
 - Pharmacology: ${research.pharmacology.uses}
 
-3. **Visual Forensic Analysis (Agent C - Inspection):**
+3. **Visual Inspection (Agent C):**
 - Quality Score: ${visualForensics.qualityScore}
 - Red Flags: ${visualForensics.redFlags.join(', ')}
-- Observed Physical: Color ${visualForensics.physicalDesc.color}, Shape ${visualForensics.physicalDesc.shape}
+- Observed physical: Color ${visualForensics.physicalDesc.color}, Shape ${visualForensics.physicalDesc.shape}
 
-**TASK:**
-Generate a final JSON report based on these findings.
-- Compare Agent A and C against Agent B's official data.
-- Determine if the imprints, colors, and names match the official data.
-- If something is missing in research, mark it as 'omission'. If it doesn't match, mark 'conflict'.
-- Calculate an overall authenticity score (0-100).
-- Assign a verdict: 'Authentic' (>85), 'Inconclusive' (65-85), or 'Counterfeit Risk' (<65).
-- Include pharmacolocial info (uses, indications) from the interpretation.
-
-**IMPORTANT: Return ONLY valid JSON matching the schema.**
+**TASK:** Generate valid JSON. Compare OCR/Inspection vs Ground Truth. Mark 'match', 'conflict', or 'omission'. Calculate score (0-100) and verdict ('Authentic', 'Inconclusive', 'Counterfeit Risk').
 `;
 
     const groqResponse = await groq.chat.completions.create({
@@ -199,19 +187,17 @@ Generate a final JSON report based on these findings.
     });
 
     const finalReportText = groqResponse.choices[0]?.message?.content;
-    if (!finalReportText) throw new Error("Final synthesis failed.");
+    if (!finalReportText) throw new Error("Final synthesis failed on Groq.");
     
     const parsed = JSON.parse(finalReportText);
     parsed.timestamp = new Date().toISOString();
     parsed.scanId = 'scan_' + Date.now();
     parsed.imprint = drugMetadata.imprint || 'NONE';
     parsed.sources = rawSources;
-    
-    // Map pharmacological data back to top level for the UI
     parsed.primaryUses = research.pharmacology.uses;
     parsed.howItWorks = research.pharmacology.howItWorks;
     parsed.commonIndications = research.pharmacology.indications;
-    parsed.safetyDisclaimer = "Disclaimer: This analysis is performed by AI and is for informational purposes only. Always consult a healthcare professional.";
+    parsed.safetyDisclaimer = "Disclaimer: This analysis is performed by multiple AI agents and is for informational purposes only. Always consult a healthcare professional.";
 
     return UnifiedAnalysisResultSchema.parse(parsed);
   }

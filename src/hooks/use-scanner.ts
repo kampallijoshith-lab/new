@@ -6,11 +6,10 @@ import { forensicAnalysisFlow } from '@/ai/flows/forensic-analysis-flow';
 
 const initialAnalysisSteps: AnalysisStep[] = [
   { title: 'Agent A: Extracting drug name and dosage (Vision OCR)...', status: 'pending', duration: 1500 },
-  { title: 'Agent B: Researching global health databases (Interpreter)...', status: 'pending', duration: 3000 },
+  { title: 'Agent B: Researching global health databases (Investigator)...', status: 'pending', duration: 3000 },
   { title: 'Agent C: Inspecting visual packaging quality (Forensics)...', status: 'pending', duration: 3000 },
-  { title: 'Parallel Execution: Synergizing Agent Findings...', status: 'pending', duration: 500 },
-  { title: 'Groq: Synthesizing final forensic verdict...', status: 'pending', duration: 2000 },
-  { title: 'Finalizing authenticity score...', status: 'pending', duration: 500 },
+  { title: 'Master Orchestrator: Synergizing all specialist findings...', status: 'pending', duration: 1000 },
+  { title: 'Finalizing authenticity score and verdict...', status: 'pending', duration: 500 },
 ];
 
 const COOLDOWN_SECONDS = 15; 
@@ -64,33 +63,32 @@ export const useScanner = () => {
 
     try {
         updateStep(0, 'in-progress');
-        // Start the backend flow
+        // Start the parallel multi-agent flow
         const analysisPromise = forensicAnalysisFlow({ photoDataUri: nextImage });
         
-        // Step 0: Agent A
+        // Wait for first step OCR (simulated timing for UI)
         await new Promise(r => setTimeout(r, 1500));
         updateStep(0, 'complete');
 
-        // Parallel Step Start
+        // Parallel Start: Agents B and C
         updateStep(1, 'in-progress');
         updateStep(2, 'in-progress');
-        updateStep(3, 'in-progress');
         
-        // Wait for actual results
         const result = await analysisPromise;
         
         updateStep(1, 'complete');
         updateStep(2, 'complete');
-        updateStep(3, 'complete');
-        updateStep(4, 'in-progress');
+        
+        // Final Synthesis
+        updateStep(3, 'in-progress');
         await new Promise(r => setTimeout(r, 1000));
+        updateStep(3, 'complete');
         updateStep(4, 'complete');
-        updateStep(5, 'complete');
 
         setAnalysisResult(result);
     } catch (e: any) {
-        console.error("Analysis failed:", e);
-        setError(e.message || 'Analysis failed. This usually means a provider hit a rate limit or a key is missing. Check your server logs.');
+        console.error("Multi-agent analysis failed:", e);
+        setError(e.message || 'Analysis failed. This usually means an API key is missing or a rate limit was hit. Ensure you have GEMINI_API_KEY_A, B, and C set.');
     } finally {
         const newCooldownEnd = Date.now() + COOLDOWN_SECONDS * 1000;
         localStorage.setItem(COOLDOWN_STORAGE_KEY, newCooldownEnd.toString());
@@ -131,7 +129,7 @@ export const useScanner = () => {
       const timer = setTimeout(() => {
         isProcessingRef.current = false;
         setState('cooldown');
-      }, 8000); // Give user time to see results
+      }, 10000); // 10 seconds for user to review
       return () => clearTimeout(timer);
     }
   }, [state]);
